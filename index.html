@@ -541,16 +541,17 @@ function cloudPushScore(rec){return ghRead().then(({sha,state})=>{
   const cp=c?posById(c.position_id):null; if(cp&&!st.positions.some(p=>p.id==cp.id))st.positions.push(cp);
   const iv=S.interviewers.find(i=>i.id==rec.interviewer_id); if(iv&&!st.interviewers.some(i=>i.id==iv.id))st.interviewers.push(iv);
   st.scores=st.scores||[];
+  if(!st.cloud&&S.cloud)st.cloud=S.cloud;
   const ex=st.scores.find(s=>s.interviewer_id==rec.interviewer_id&&s.candidate_id==rec.candidate_id);
   if(ex)Object.assign(ex,rec);else st.scores.push(rec);
   return ghWrite(st,sha);});}
 function saveCloud(){S.cloud={repo:$("#gh-repo").value.trim(),file:$("#gh-file").value.trim(),token:$("#gh-token").value.trim()};save();toast("GitHub云端设置已保存");}
 function pushCloud(){if(!S.cloud.repo||!S.cloud.file||!S.cloud.token){toast("请先填写仓库/文件/Token");return;}
   GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;toast("上传中…");
-  ghRead().then(({sha})=>ghWrite({positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores},sha))
+  ghRead().then(({sha})=>ghWrite({positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores,cloud:S.cloud},sha))
     .then(()=>toast("配置已上传GitHub云端 ✔")).catch(e=>toast("上传失败:"+e.message));}
 function fetchCloud(){if(!GH_REPO||!GH_FILE){toast("未设置GitHub云端");return;}toast("从云端刷新…");
-  ghRead().then(({state})=>{mergeState(state);save();toast("已从GitHub云端合并 ✔");renderAll();}).catch(e=>toast("云端拉取失败:"+e.message));}
+  ghRead().then(({state})=>{mergeState(state);if(state.cloud){S.cloud=state.cloud;GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;}save();toast("已从GitHub云端合并 ✔");renderAll();}).catch(e=>toast("云端拉取失败:"+e.message));}
 function applyRole(){const q=new URLSearchParams(location.search);
   if(q.get('role')==='interviewer')ROLE='iv';
   GH_REPO=q.get('gh')||S.cloud.repo||null;GH_FILE=q.get('ghf')||S.cloud.file||null;GH_TOKEN=q.get('ghk')||S.cloud.token||null;
@@ -602,7 +603,21 @@ function renderAll(){renderConfig();renderResult();}
 document.querySelectorAll("nav button").forEach(b=>{b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));$("#v-"+b.dataset.v).classList.add("on");};});
 $("#sel-iv").onchange=renderScoreForm;$("#sel-ca").onchange=renderScoreForm;
-(function init(){S=load()||S;ensureSeed();applyRole();tryHash();if(ROLE==='iv'&&CLOUD&&ROOM)fetchCloud();renderAll();})();
+(function init(){
+  S=load()||S;ensureSeed();applyRole();tryHash();
+  /* 有云端配置 → 自动拉取数据（换设备/换浏览器也能同步） */
+  const hasCloud = GH_REPO && GH_FILE;
+  if(hasCloud){
+    if(ROLE==='iv'){
+      fetchCloud();renderAll();return;
+    }
+    /* HR 端：先渲染本地数据（避免白屏），后台静默拉取云端 */
+    renderAll();
+    ghRead().then(({state})=>{mergeState(state);if(state.cloud){S.cloud=state.cloud;}save();renderAll();}).catch(()=>{});
+  }else{
+    renderAll();
+  }
+})();
 </script>
 </body>
 </html>
