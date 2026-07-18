@@ -248,11 +248,18 @@ function renderConfig(){
     return `<div style="margin:4px 0">· ${c.name} <span class="small">→ ${p?p.name:'未知岗位'}</span>${scored} <span class="delx" style="float:none;margin-left:6px" onclick="delCandidate(${c.id})">归档</span><span class="delx" style="float:none;margin-left:6px" onclick="deleteCandidateHard(${c.id})">删除</span></div>`;}).join(""):"尚未添加候选人";
   if(S.archived.length){caHtml+='<div class="small" style="margin-top:8px;color:var(--sub)">📦 已归档（历史可查）：'+S.archived.map(a=>{const p=posById(a.position_id);return `<span style="margin:2px 6px 2px 0;display:inline-block">${a.name}<span class="small">→ ${p?p.name:'?'}</span> <span class="delx" style="float:none;margin-left:2px" onclick="restoreCandidate(${a.id})">恢复</span></span>`;}).join("")+'</div>';}
   $("#ca-list").innerHTML=caHtml;
-  $("#pos-list").innerHTML=S.positions.map(p=>{const dims=p.dimensions.map(d=>`${d.name}(${d.weight}%)`).join("、");
+  $("#pos-list").innerHTML=S.positions.map(p=>{
     const del=p.is_preset?"":`<span class="delx" onclick="delPosition(${p.id})">删除</span>`;
     const badge=p.is_preset?`<span class="pill ok" style="margin-left:6px">预置</span>`:`<span class="pill warn" style="margin-left:6px">自定义</span>`;
     const ivChecks=S.interviewers.length?S.interviewers.map(i=>`<label style="margin:2px 8px 2px 0;font-size:12px;font-weight:400"><input type="checkbox" class="pos-iv" data-pid="${p.id}" value="${i.id}" ${((p.interviewers||[]).includes(i.id))?'checked':''} onchange="togglePosIv(${p.id},${i.id},this.checked)">${i.name}</label>`).join(""):"（请先添加面试官）";
-    return `<div class="poscard">${del}<span class="pn">${p.name}</span>${badge}<div class="small" style="margin-top:3px">${p.tag||""}</div><div class="small" style="margin-top:3px">维度：${dims}</div><div class="small" style="margin-top:6px;color:var(--primary)">分配面试官：</div><div class="pos-iv-box">${ivChecks}</div></div>`;}).join("");
+    const dimEdit=p.dimensions.map((d,di)=>`<div class="row" style="margin:4px 0;align-items:center"><div style="flex:1"><span class="small">${d.name}</span></div><div style="flex:0 0 100px"><input type="number" class="dim-w" data-pid="${p.id}" data-dk="${d.key}" value="${d.weight}" min="1" max="100" style="width:60px;padding:4px 6px;font-size:13px">%</div></div>`).join("");
+    const wsum=p.dimensions.reduce((s,d)=>s+(+d.weight||0),0);
+    const wsumCls=wsum===100?"ok":"bad";
+    return `<div class="poscard">${del}<span class="pn">${p.name}</span>${badge}<div class="small" style="margin-top:3px">${p.tag||""}</div>
+    <div class="small" style="margin-top:6px;color:var(--primary)">维度权重（可调整，合计需100%）：</div>
+    <div class="dim-w-box">${dimEdit}</div>
+    <div class="small" style="margin-top:4px">权重合计：<span class="pill ${wsumCls}">${wsum}%</span> <button class="btn sm ghost" style="margin-left:6px;padding:3px 8px;font-size:12px" onclick="saveWeights(${p.id})">保存权重</button></div>
+    <div class="small" style="margin-top:6px;color:var(--primary)">分配面试官：</div><div class="pos-iv-box">${ivChecks}</div></div>`;}).join("");
   const iv=$("#sel-iv");const cur=iv.value;iv.innerHTML="";S.interviewers.forEach(i=>{iv.appendChild(new Option(i.name,i.id));});if(cur)iv.value=cur;
   const ca=$("#sel-ca");const curc=ca.value;ca.innerHTML="";S.candidates.forEach(c=>{const p=posById(c.position_id);ca.appendChild(new Option(c.name+"（"+(p?p.name:"?")+"）",c.id));});if(curc)ca.value=curc;
   const cp=$("#ca-pos");cp.innerHTML="";S.positions.forEach(p=>cp.appendChild(new Option(p.name,p.id)));
@@ -288,6 +295,15 @@ function togglePosIv(pid,iid,checked){const p=posById(pid);if(!p)return;if(!Arra
   if(checked){if(!p.interviewers.includes(iid))p.interviewers.push(iid);}
   else{p.interviewers=p.interviewers.filter(x=>x!=iid);}
   save();}
+function saveWeights(pid){const p=posById(pid);if(!p)return;
+  let total=0;let ok=true;
+  document.querySelectorAll(`input.dim-w[data-pid="${pid}"]`).forEach(inp=>{
+    const dk=inp.dataset.dk;const w=+inp.value;
+    if(!w||w<1||w>100){toast(`权重需在1-100之间`);ok=false;return;}
+    const dim=p.dimensions.find(d=>d.key===dk);if(dim)dim.weight=w;total+=w;});
+  if(!ok)return;
+  if(total!==100){toast(`权重合计需为100%，当前${total}%`);return;}
+  save();toast("权重已保存 ✔");renderConfig();}
 function delPosition(id){const p=posById(id);if(p.is_preset){toast("预置岗位不可删除");return;}
   if(!confirm("删除该自定义岗位将同时删除其下候选人与评分，确认？"))return;
   S.candidates=S.candidates.filter(c=>c.position_id!=id);
