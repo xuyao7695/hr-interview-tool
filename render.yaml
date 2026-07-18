@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: hr-interview-cloud
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    env:
+      - key: CLOUD_DIR
+        value: cloud_data
