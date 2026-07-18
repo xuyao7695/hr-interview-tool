@@ -136,12 +136,15 @@
       </div>
     </div>
     <div class="card noprint">
-      <h3>云端自动合并（可选 · 推荐）</h3>
-      <div class="small" style="margin-bottom:8px">填写云端地址与房间密钥后：面试官提交评分将<b>自动上传合并</b>，HR 在结果页点「☁ 从云端刷新」即汇总，无需来回传链接。留空则退化为本地 + 链接模式。</div>
-      <label>云端地址（部署后获得，如 https://xxx.onrender.com）</label>
-      <input type="text" id="cloud-url" placeholder="留空则仅本地+链接">
-      <label>房间密钥（自定义，如 dk2026，会写入发给面试官的链接）</label>
-      <input type="text" id="cloud-key" placeholder="如：dk2026">
+      <h3>GitHub 云端自动合并（零部署 · 推荐）</h3>
+      <div class="small" style="margin-bottom:8px">用你的 GitHub 仓库当云端：面试官提交评分将<b>自动写回仓库文件</b>，HR 在结果页点「☁ 从云端刷新」即汇总，无需来回传链接。<br>
+      <b>Token 建议用细粒度令牌</b>（仅勾选本仓库 <code>Contents: Read/Write</code>），会写进发给面试官的链接里，用后可在 GitHub 撤销。留空则退化为本地 + 离线回传链接模式。</div>
+      <label>仓库（owner/repo，如 xuyao7695/hr-interview-tool）</label>
+      <input type="text" id="gh-repo" placeholder="owner/repo">
+      <label>云端文件名（自定义，如 dk2026.json）</label>
+      <input type="text" id="gh-file" placeholder="如：dk2026.json">
+      <label>GitHub Token（细粒度，仅本仓库写权限）</label>
+      <input type="text" id="gh-token" placeholder="ghp_xxx">
       <div class="row" style="margin-top:10px">
         <button class="btn sm" style="margin:0" onclick="saveCloud()">保存云端设置</button>
         <button class="btn sm ghost" style="margin:0" onclick="pushCloud()">⬆ 上传配置到云端</button>
@@ -213,11 +216,11 @@ let lastCaForIv=null;
 let lastIvForCa=null;
 let ROLE='hr';          // 'hr' | 'iv'
 let FIXED_IV=null;      // 面试官模式预选的面试官 id
-let CLOUD=null, ROOM=null; // 云端地址与房间密钥
+let GH_REPO=null, GH_FILE=null, GH_TOKEN=null; // GitHub 云端：仓库/文件/Token
 
 /* ---------- 本地存储 ---------- */
-let S={positions:[],interviewers:[],candidates:[],archived:[],scores:[],seedVersion:0,cloud:{url:'',key:''}};
-function load(){try{const d=JSON.parse(localStorage.getItem(LS_KEY));if(d&&d.positions){if(!d.seedVersion)d.seedVersion=0;if(!Array.isArray(d.archived))d.archived=[];if(!d.cloud)d.cloud={url:'',key:''};return d;}}catch(e){}return null;}
+let S={positions:[],interviewers:[],candidates:[],archived:[],scores:[],seedVersion:0,cloud:{repo:'',file:'',token:''}};
+function load(){try{const d=JSON.parse(localStorage.getItem(LS_KEY));if(d&&d.positions){if(!d.seedVersion)d.seedVersion=0;if(!Array.isArray(d.archived))d.archived=[];if(!d.cloud)d.cloud={repo:'',file:'',token:''};return d;}}catch(e){}return null;}
 function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));}
 const SEED_VERSION=2;
 function ensureSeed(){
@@ -236,8 +239,9 @@ function ensureSeed(){
 
 /* ---------- 配置 ---------- */
 function renderConfig(){
-  if($("#cloud-url"))$("#cloud-url").value=S.cloud.url||"";
-  if($("#cloud-key"))$("#cloud-key").value=S.cloud.key||"";
+  if($("#gh-repo"))$("#gh-repo").value=S.cloud.repo||"";
+  if($("#gh-file"))$("#gh-file").value=S.cloud.file||"";
+  if($("#gh-token"))$("#gh-token").value=S.cloud.token||"";
   $("#iv-list").innerHTML=S.interviewers.length?"已添加面试官："+S.interviewers.map(i=>`<span class="pill ok" style="margin:2px">${i.name} <span class="delx" style="float:none;margin-left:4px" onclick="delInterviewer(${i.id})">✕</span></span>`).join(" "):"尚未添加面试官";
   let caHtml=S.candidates.length?S.candidates.map(c=>{const p=posById(c.position_id);const sc=S.scores.filter(s=>s.candidate_id==c.id).length;
     const scored=sc?`<span class="pill ok" style="margin-left:4px">已面试 ${sc}人</span>`:"";
@@ -392,7 +396,7 @@ function submitScore(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
   if(ex)Object.assign(ex,rec2);else S.scores.push(rec2);
   save();
   const after=()=>{renderScoreForm();renderResult();};
-  if(CLOUD&&ROOM){toast("提交中…");cloudPushScore(rec2).then(()=>{toast("已提交并上传云端 ✔");after();}).catch(()=>{toast("本地已存，云端上传失败");after();});}
+  if(GH_REPO&&GH_FILE){toast("提交中…");cloudPushScore(rec2).then(()=>{toast("已提交并写回GitHub云端 ✔");after();}).catch(()=>{toast("本地已存，GitHub云端写入失败");after();});}
   else{toast("提交成功 ✔");after();}}
 
 /* ---------- 结果：自动加权汇总 ---------- */
@@ -450,7 +454,7 @@ function mergeState(imp){if(!imp||!imp.positions)return;
     const ex=S.scores.find(x=>x.interviewer_id===ivId&&x.candidate_id===candId);
     const rec={interviewer_id:ivId,candidate_id:candId,interviewer_name:sc.interviewer_name,scores:sc.scores,notes:sc.notes,recommendation:sc.recommendation,comment:sc.comment,knockouts:sc.knockouts,exceptional:sc.exceptional,updated_at:sc.updated_at};
     if(ex)Object.assign(ex,rec);else S.scores.push(rec);});}
-function resetAll(){if(!confirm("将清空本设备全部数据，确认？"))return;localStorage.removeItem(LS_KEY);S={positions:[],interviewers:[],candidates:[],archived:[],scores:[],seedVersion:0,cloud:{url:'',key:''}};ensureSeed();renderAll();toast("已清空并重置");}
+function resetAll(){if(!confirm("将清空本设备全部数据，确认？"))return;localStorage.removeItem(LS_KEY);S={positions:[],interviewers:[],candidates:[],archived:[],scores:[],seedVersion:0,cloud:{repo:'',file:'',token:''}};ensureSeed();renderAll();toast("已清空并重置");}
 
 /* ---------- 协作链接（URL hash 编码，零服务器） ---------- */
 function b64encode(obj){return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));}
@@ -467,11 +471,11 @@ function copyInterviewerLink(){
   if(!S.candidates.length){toast("请先添加候选人");return;}
   const base=location.href.split("#")[0].split("?")[0];
   let u=base+"?role=interviewer";
-  if(S.cloud.url&&S.cloud.key)u+="&cloud="+encodeURIComponent(S.cloud.url)+"&cloudkey="+encodeURIComponent(S.cloud.key);
+  if(S.cloud.repo&&S.cloud.file&&S.cloud.token)u+="&gh="+encodeURIComponent(S.cloud.repo)+"&ghf="+encodeURIComponent(S.cloud.file)+"&ghk="+encodeURIComponent(S.cloud.token);
   const slice={positions:exportPositions(),interviewers:S.interviewers,candidates:S.candidates};
   const h="#cfg="+b64encode(slice);
-  if((u+h).length>30000){toast("内容较大，请先『上传配置到云端』再发纯云端链接");return;}
-  copyText(u+h);toast("面试官链接已复制（仅评分页）");}
+  if((u+h).length>30000){toast("内容较大，请先『上传配置到GitHub云端』再发纯云端链接");return;}
+  copyText(u+h);toast("面试官链接已复制（仅评分页，提交自动写回GitHub）");}
 function copyScoresLink(){const slice={positions:exportPositions(),interviewers:S.interviewers,candidates:S.candidates,scores:S.scores};
   const h="#sc="+b64encode(slice);if(h.length>30000){toast("评分较多，请用『导出评分』JSON发HR");return;}
   copyText(linkWith(h));toast("评分链接已复制，发回HR即可");}
@@ -480,30 +484,41 @@ function tryHash(){const h=location.hash;
   else if(h.indexOf("#sc=")===0){try{mergeState(b64decode(h.slice(4)));save();cleanHash();renderAll();toast("已合并评分 ✔");}catch(e){toast("链接解析失败");}}}
 function cleanHash(){history.replaceState(null,"",location.pathname+location.search);}
 
-/* ---------- 云端自动合并（可选） ---------- */
-function cloudPushScore(rec){const url=(CLOUD||S.cloud.url||"").replace(/\/$/,'');const key=ROOM||S.cloud.key||"";
-  return fetch(url+"/api/score",{method:"POST",headers:{"Content-Type":"application/json","x-room":key},
-    body:JSON.stringify({room:key,score:rec,candidate:S.candidates.find(c=>c.id==rec.candidate_id),position:posById(rec.candidate_id)})})
-    .then(r=>{if(!r.ok)throw new Error("http "+r.status);return r.json();});}
-function saveCloud(){S.cloud={url:$("#cloud-url").value.trim(),key:$("#cloud-key").value.trim()};save();toast("云端设置已保存");}
-function pushCloud(){if(!S.cloud.url||!S.cloud.key){toast("请先填写云端地址与密钥");return;}
-  CLOUD=S.cloud.url;ROOM=S.cloud.key;toast("上传中…");
-  fetch(CLOUD.replace(/\/$/,'')+"/api/state",{method:"POST",headers:{"Content-Type":"application/json","x-room":ROOM},
-    body:JSON.stringify({room:ROOM,state:{positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores}})})
-    .then(r=>{if(!r.ok)throw new Error();toast("配置已上传云端 ✔");}).catch(()=>toast("上传失败，检查地址/网络"));}
-function fetchCloud(){const url=(CLOUD||S.cloud.url);const key=ROOM||S.cloud.key;
-  if(!url||!key){toast("未设置云端");return;}toast("从云端刷新…");
-  fetch(url.replace(/\/$/,'')+"/api/state?room="+encodeURIComponent(key))
-    .then(r=>r.ok?r.json():Promise.reject()).then(d=>{if(d&&d.state){mergeState(d.state);save();toast("已从云端合并 ✔");renderAll();}}).catch(()=>toast("云端拉取失败"));}
+/* ---------- GitHub 当云端（零部署） ---------- */
+function blankState(){return {positions:[],interviewers:[],candidates:[],archived:[],scores:[]};}
+function ghApi(path,opts){return fetch("https://api.github.com/"+path,Object.assign({headers:{"Authorization":"Bearer "+(GH_TOKEN||S.cloud.token),"Accept":"application/vnd.github+json"}},opts||{}));}
+function ghRead(){return ghApi("repos/"+encodeURIComponent(GH_REPO)+"/contents/"+encodeURIComponent(GH_FILE)).then(r=>{
+  if(r.status===404)return {sha:null,state:blankState()};
+  if(!r.ok)throw new Error("http "+r.status);
+  return r.json().then(j=>({sha:j.sha,state:JSON.parse(decodeURIComponent(escape(atob(j.content))))}));});}
+function ghWrite(state,sha){const body={message:"hr-interview update",content:btoa(unescape(encodeURIComponent(JSON.stringify(state))))};if(sha)body.sha=sha;
+  return ghApi("repos/"+encodeURIComponent(GH_REPO)+"/contents/"+encodeURIComponent(GH_FILE),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)throw new Error("http "+r.status);return r.json();});}
+/* 面试官提交：读回云端 → 合并该评分(并按id补齐候选人/岗位/面试官) → 写回 */
+function cloudPushScore(rec){return ghRead().then(({sha,state})=>{
+  const st=(state&&state.scores)?state:blankState();
+  const c=S.candidates.find(x=>x.id==rec.candidate_id); if(c&&!st.candidates.some(x=>x.id==c.id))st.candidates.push(c);
+  const cp=c?posById(c.position_id):null; if(cp&&!st.positions.some(p=>p.id==cp.id))st.positions.push(cp);
+  const iv=S.interviewers.find(i=>i.id==rec.interviewer_id); if(iv&&!st.interviewers.some(i=>i.id==iv.id))st.interviewers.push(iv);
+  st.scores=st.scores||[];
+  const ex=st.scores.find(s=>s.interviewer_id==rec.interviewer_id&&s.candidate_id==rec.candidate_id);
+  if(ex)Object.assign(ex,rec);else st.scores.push(rec);
+  return ghWrite(st,sha);});}
+function saveCloud(){S.cloud={repo:$("#gh-repo").value.trim(),file:$("#gh-file").value.trim(),token:$("#gh-token").value.trim()};save();toast("GitHub云端设置已保存");}
+function pushCloud(){if(!S.cloud.repo||!S.cloud.file||!S.cloud.token){toast("请先填写仓库/文件/Token");return;}
+  GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;toast("上传中…");
+  ghRead().then(({sha})=>ghWrite({positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores},sha))
+    .then(()=>toast("配置已上传GitHub云端 ✔")).catch(()=>toast("上传失败，检查仓库/Token/网络"));}
+function fetchCloud(){if(!GH_REPO||!GH_FILE){toast("未设置GitHub云端");return;}toast("从云端刷新…");
+  ghRead().then(({state})=>{mergeState(state);save();toast("已从GitHub云端合并 ✔");renderAll();}).catch(()=>toast("云端拉取失败（检查仓库/Token/网络）"));}
 function applyRole(){const q=new URLSearchParams(location.search);
   if(q.get('role')==='interviewer')ROLE='iv';
-  CLOUD=q.get('cloud')||S.cloud.url||null;ROOM=q.get('cloudkey')||q.get('key')||S.cloud.key||null;
+  GH_REPO=q.get('gh')||S.cloud.repo||null;GH_FILE=q.get('ghf')||S.cloud.file||null;GH_TOKEN=q.get('ghk')||S.cloud.token||null;
   const ivp=q.get('iv');if(ivp)FIXED_IV=+ivp;
   if(ROLE==='iv'){const cfg=$("#nav-cfg"),res=$("#nav-result"),sc=$("#nav-score");
     cfg.style.display='none';res.style.display='none';sc.classList.add('on');
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));$("#v-score").classList.add('on');
     if(FIXED_IV)$("#iv-row").style.display='none';
-    const live=document.querySelector('header .live');if(live)live.textContent='面试官评分端（提交自动上传）';}}
+    const live=document.querySelector('header .live');if(live)live.textContent='面试官评分端（提交自动写回GitHub）';}}
 
 /* ---------- 导出格式化报告（需求3） ---------- */
 function exportReport(){const data=aggregate();if(!data.length){toast("暂无数据");return;}
