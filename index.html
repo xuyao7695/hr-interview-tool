@@ -138,7 +138,8 @@
     <div class="card noprint">
       <h3>GitHub 云端自动合并（零部署 · 推荐）</h3>
       <div class="small" style="margin-bottom:8px">用你的 GitHub 仓库当云端：面试官提交评分将<b>自动写回仓库文件</b>，HR 在结果页点「☁ 从云端刷新」即汇总，无需来回传链接。<br>
-      <b>Token 建议用细粒度令牌</b>（仅勾选本仓库 <code>Contents: Read/Write</code>），会写进发给面试官的链接里，用后可在 GitHub 撤销。留空则退化为本地 + 离线回传链接模式。</div>
+      <b>Token 建议用细粒度令牌</b>（仅勾选本仓库 <code>Contents: Read/Write</code>），会写进发给面试官的链接里，用后可在 GitHub 撤销。留空则退化为本地 + 离线回传链接模式。<br>
+      <b>换设备同步</b>：填好三项点「保存云端设置」后，<b>地址栏会自动带上云端配置</b>；直接复制地址栏（或点「🔗 复制主链接」）在手机/电脑打开，即自动拉取全部数据（岗位/面试官/候选人/评分/归档），无需重新填写。</div>
       <label>仓库（owner/repo，如 xuyao7695/hr-interview-tool）</label>
       <input type="text" id="gh-repo" placeholder="owner/repo">
       <label>云端文件名（自定义，如 dk2026.json）</label>
@@ -148,6 +149,7 @@
       <div class="row" style="margin-top:10px">
         <button class="btn sm" style="margin:0" onclick="saveCloud()">保存云端设置</button>
         <button class="btn sm ghost" style="margin:0" onclick="pushCloud()">⬆ 上传配置到云端</button>
+        <button class="btn sm ghost" style="margin:0" onclick="copyMainLink()">🔗 复制主链接</button>
       </div>
     </div>
     <div class="card noprint">
@@ -545,16 +547,47 @@ function cloudPushScore(rec){return ghRead().then(({sha,state})=>{
   const ex=st.scores.find(s=>s.interviewer_id==rec.interviewer_id&&s.candidate_id==rec.candidate_id);
   if(ex)Object.assign(ex,rec);else st.scores.push(rec);
   return ghWrite(st,sha);});}
-function saveCloud(){S.cloud={repo:$("#gh-repo").value.trim(),file:$("#gh-file").value.trim(),token:$("#gh-token").value.trim()};save();toast("GitHub云端设置已保存");}
-function pushCloud(){if(!S.cloud.repo||!S.cloud.file||!S.cloud.token){toast("请先填写仓库/文件/Token");return;}
-  GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;toast("上传中…");
+function saveCloud(){
+  S.cloud={repo:$("#gh-repo").value.trim(),file:$("#gh-file").value.trim(),token:$("#gh-token").value.trim()};
+  save();
+  /* 把云端配置写进地址栏：保存后地址栏本身就是“含云端配置的主链接”，
+     换设备直接复制地址栏打开即可自动同步，无需重新填写仓库信息 */
+  if(S.cloud.repo&&S.cloud.file&&S.cloud.token){
+    const base=location.href.split("#")[0].split("?")[0];
+    history.replaceState(null,"",base+"?gh="+encodeURIComponent(S.cloud.repo)+"&ghf="+encodeURIComponent(S.cloud.file)+"&ghk="+encodeURIComponent(S.cloud.token));
+    toast("云端设置已保存，地址栏已含云端配置，直接复制地址栏即可多端同步");
+  }else{
+    toast("GitHub云端设置已保存（仓库/文件/Token 三项齐全才会写入链接）");
+  }
+}
+/* HR 主链接（含云端配置）：任何设备打开都自动拉取云端，无需重填仓库信息 */
+function copyMainLink(){
+  if(!S.cloud.repo||!S.cloud.file||!S.cloud.token){toast("请先填写并保存GitHub云端设置");return;}
+  const base=location.href.split("#")[0].split("?")[0];
+  const u=base+"?gh="+encodeURIComponent(S.cloud.repo)+"&ghf="+encodeURIComponent(S.cloud.file)+"&ghk="+encodeURIComponent(S.cloud.token);
+  copyText(u);toast("主链接已复制（含云端配置，换设备打开自动同步全部数据）");
+}
+function pushCloud(){
+  /* 本地未存配置时先从表单读取并保存，让“上传到云端”一键可用 */
+  if(!S.cloud.repo||!S.cloud.file||!S.cloud.token){
+    const r=$("#gh-repo").value.trim(),f=$("#gh-file").value.trim(),t=$("#gh-token").value.trim();
+    if(r&&f&&t){S.cloud={repo:r,file:f,token:t};save();}else{toast("请先填写仓库/文件/Token");return;}
+  }
+  GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;
+  /* 同步写入地址栏，方便复制链接多端同步 */
+  const base=location.href.split("#")[0].split("?")[0];
+  history.replaceState(null,"",base+"?gh="+encodeURIComponent(S.cloud.repo)+"&ghf="+encodeURIComponent(S.cloud.file)+"&ghk="+encodeURIComponent(S.cloud.token));
+  toast("上传中…");
   ghRead().then(({sha})=>ghWrite({positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores,cloud:S.cloud},sha))
-    .then(()=>toast("配置已上传GitHub云端 ✔")).catch(e=>toast("上传失败:"+e.message));}
+    .then(()=>toast("配置已上传GitHub云端 ✔（地址栏已含云端配置，可直接分享）")).catch(e=>toast("上传失败:"+e.message));}
 function fetchCloud(){if(!GH_REPO||!GH_FILE){toast("未设置GitHub云端");return;}toast("从云端刷新…");
   ghRead().then(({state})=>{mergeState(state);if(state.cloud){S.cloud=state.cloud;GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;}save();toast("已从GitHub云端合并 ✔");renderAll();}).catch(e=>toast("云端拉取失败:"+e.message));}
 function applyRole(){const q=new URLSearchParams(location.search);
   if(q.get('role')==='interviewer')ROLE='iv';
   GH_REPO=q.get('gh')||S.cloud.repo||null;GH_FILE=q.get('ghf')||S.cloud.file||null;GH_TOKEN=q.get('ghk')||S.cloud.token||null;
+  /* 链接自带云端配置 → 同步进本地 S.cloud 并持久化，
+     否则换设备打开后若触发回写会把云端配置清空，导致后续无法再同步 */
+  if(q.get('gh')&&q.get('ghf')&&q.get('ghk')){S.cloud={repo:GH_REPO,file:GH_FILE,token:GH_TOKEN};save();}
   const ivp=q.get('iv');if(ivp)FIXED_IV=+ivp;
   if(ROLE==='iv'){const cfg=$("#nav-cfg"),res=$("#nav-result"),sc=$("#nav-score");
     cfg.style.display='none';res.style.display='none';sc.classList.add('on');
@@ -613,7 +646,7 @@ $("#sel-iv").onchange=renderScoreForm;$("#sel-ca").onchange=renderScoreForm;
     }
     /* HR 端：先渲染本地数据（避免白屏），后台静默拉取云端 */
     renderAll();
-    ghRead().then(({state})=>{mergeState(state);if(state.cloud){S.cloud=state.cloud;}save();renderAll();}).catch(()=>{});
+    ghRead().then(({state})=>{mergeState(state);if(state.cloud){S.cloud=state.cloud;GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;}save();renderAll();}).catch(()=>{});
   }else{
     renderAll();
   }
