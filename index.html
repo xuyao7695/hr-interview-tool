@@ -255,15 +255,36 @@ function renderScoreForm(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").val
       <div class="sco">${[5,4,3,2,1].map(v=>`<label><input type="radio" name="sc_${d.key}" value="${v}" ${sv==v?'checked':''}><span>${v}</span></label>`).join("")}</div>
       <label style="margin-top:8px">STAR 记录 / 评语（可选）</label>
       <textarea class="note" data-k="${d.key}" placeholder="记录候选人关键回答…">${note}</textarea></div>`;});
+  let ko=existing&&existing.knockouts?existing.knockouts:[];
+  let koHtml=`<div class="card" style="border:1px solid var(--bad)"><h3>🚫 硬性指标一票否决</h3>
+    <div class="small" style="margin-bottom:6px">任一项勾选「不达标」，无论综合分多少，直接判 <b>不建议</b>。请填写具体门槛，如：无大电流PCB经验 / 有诚信问题（内容自定，不预置）。</div>
+    <div id="ko-list">`;
+  ko.forEach(k=>{koHtml+=`<div class="ko-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+    <input type="text" class="ko-text" placeholder="填写一项硬性否决门槛…" value="${k.text}" style="flex:1">
+    <select class="ko-fail" style="flex:0 0 110px"><option value="0" ${!k.fail?'selected':''}>达标</option><option value="1" ${k.fail?'selected':''}>不达标</option></select>
+    <span class="delx" onclick="this.parentNode.remove()">✕</span></div>`;});
+  koHtml+=`</div><button class="btn sm ghost" style="margin-top:4px" type="button" onclick="addKoRow()">＋ 添加否决项</button></div>`;
+  html+=koHtml;
   let rec=existing?existing.recommendation:"";
   html+=`<div class="card"><h3>综合录用建议</h3><div class="rec">
       <label><input type="radio" name="rec" value="hire" ${rec==='hire'?'checked':''}><span class="hire">建议录用</span></label>
       <label><input type="radio" name="rec" value="hold" ${rec==='hold'?'checked':''}><span class="hold">待定</span></label>
       <label><input type="radio" name="rec" value="reject" ${rec==='reject'?'checked':''}><span class="reject">不建议</span></label></div>
     <label>总体评语（可选）</label><textarea id="overall-comment" placeholder="该候选人的整体判断…">${existing?existing.comment:''}</textarea></div>`;
+  let exc=existing&&existing.exceptional?existing.exceptional:{dim:"",evidence:""};
+  html+=`<div class="card" style="border:1px solid var(--ok)"><h3>⭐ 特别优秀破格录用</h3>
+    <div class="small" style="margin-bottom:6px">仅当某核心维度极突出且有量化证据时填写；破格需多人一致，由 HR 最终确认（内容自定，不预置）。</div>
+    <label>破格维度 / 突出能力</label><input type="text" id="exc-dim" placeholder="如：导航算法、行业资源" value="${exc.dim}">
+    <label style="margin-top:6px">破格成就证据（必填）</label><textarea id="exc-evidence" placeholder="填写具体成就，如：主导过某型号取证 / 年降本超百万 / 核心专利…">${exc.evidence}</textarea></div>`;
   $("#score-form").innerHTML=html;
   const cnt=S.scores.filter(s=>s.candidate_id==caId).length;
   $("#score-status").innerHTML=existing?`<span class="pill ok">你已提交，可修改后重提</span> &nbsp; 当前已有 <b>${cnt}</b> 位面试官提交`:`<span class="pill warn">你尚未提交</span> &nbsp; 当前已有 <b>${cnt}</b> 位面试官提交`;}
+function addKoRow(){const list=$("#ko-list");if(!list)return;const div=document.createElement("div");div.className="ko-row";
+  div.style.cssText="display:flex;gap:6px;margin-bottom:6px;align-items:center";
+  div.innerHTML=`<input type="text" class="ko-text" placeholder="填写一项硬性否决门槛…" style="flex:1">
+    <select class="ko-fail" style="flex:0 0 110px"><option value="0">达标</option><option value="1">不达标</option></select>
+    <span class="delx" onclick="this.parentNode.remove()">✕</span>`;
+  list.appendChild(div);}
 function submitScore(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
   if(!caId||!ivId){toast("请先选择面试官和候选人");return;}
   const cand=S.candidates.find(c=>c.id==caId),pos=posById(cand.position_id);
@@ -273,8 +294,11 @@ function submitScore(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
   if(miss){toast("请完成所有维度评分");return;}
   const rec=document.querySelector('input[name="rec"]:checked');if(!rec){toast("请选择录用建议");return;}
   const comment=$("#overall-comment").value.trim();
+  const knockouts=[];$$("#ko-list .ko-row").forEach(row=>{const t=row.querySelector(".ko-text").value.trim();const f=row.querySelector(".ko-fail").value==="1";if(t)knockouts.push({text:t,fail:f});});
+  const excDim=$("#exc-dim").value.trim();const excEv=$("#exc-evidence").value.trim();
+  const exceptional=excDim||excEv?{dim:excDim,evidence:excEv}:null;
   const ex=S.scores.find(s=>s.interviewer_id==ivId&&s.candidate_id==caId);
-  const rec2={interviewer_id:ivId,candidate_id:caId,scores,notes,recommendation:rec.value,comment,updated_at:new Date().toLocaleString()};
+  const rec2={interviewer_id:ivId,candidate_id:caId,scores,notes,recommendation:rec.value,comment,knockouts,exceptional,updated_at:new Date().toLocaleString()};
   if(ex)Object.assign(ex,rec2);else S.scores.push(rec2);
   save();toast("提交成功 ✔");renderScoreForm();renderResult();}
 
@@ -284,9 +308,14 @@ function aggregate(){return S.candidates.map(c=>{const pos=posById(c.position_id
   if(scs.length)pos.dimensions.forEach(d=>{const vals=scs.map(s=>s.scores[d.key]).filter(v=>typeof v==='number');dimAvg[d.key]=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length):null;});
   let overall=0,wsum=0;pos.dimensions.forEach(d=>{if(dimAvg[d.key]!=null){overall+=dimAvg[d.key]*d.weight;wsum+=d.weight;}});
   overall=wsum?+((overall/wsum)).toFixed(2):null;
-  const finalRec=overall==null?"—":(overall>=4?"建议录用":overall>=3?"待定":"不建议录用");
-  const recPill=overall==null?"":(overall>=4?"ok":overall>=3?"warn":"bad");
-  return {cand:c,pos,scs,dimAvg,overall,finalRec,recPill,n:scs.length};});}
+  const allKo=scs.flatMap(s=>(s.knockouts||[]));const anyFail=allKo.some(k=>k.fail);
+  const excList=scs.map(s=>s.exceptional).filter(Boolean);
+  let finalRec,recPill;
+  if(anyFail){finalRec="一票否决·不建议";recPill="bad";}
+  else if(overall==null){finalRec="—";recPill="";}
+  else if(excList.length){finalRec="破格录用";recPill="ok";}
+  else {finalRec=overall>=4?"建议录用":overall>=3?"待定":"不建议录用";recPill=overall>=4?"ok":overall>=3?"warn":"bad";}
+  return {cand:c,pos,scs,dimAvg,overall,finalRec,recPill,n:scs.length,knockout:anyFail,exceptional:excList};});}
 function renderResult(){const data=aggregate();
   $("#result-meta").textContent=`候选人 ${S.candidates.length} 人 · 面试官 ${S.interviewers.length} 人 · 共 ${S.scores.length} 份评分`;
   if(!data.length){$("#result-box").innerHTML='<div class="empty">暂无数据，请先配置并评分。</div>';return;}
@@ -295,12 +324,15 @@ function renderResult(){const data=aggregate();
     let dimRow=`<td class="l">平均分</td>`+d.pos.dimensions.map(x=>{const v=d.dimAvg[x.key];if(v==null)return`<td>—</td>`;const cls=v>=4?"ok":v>=3?"warn":"bad";return`<td><span class="pill ${cls}">${v.toFixed(2)}</span></td>`;}).join("")+`<td><span class="scorebig" style="color:${d.overall>=4?'var(--ok)':d.overall>=3?'var(--warn)':'var(--bad)'}">${d.overall??'—'}</span></td>`;
     let det="";if(d.scs.length){det=`<div class="detail">`;d.scs.forEach(s=>{const iv=S.interviewers.find(i=>i.id==s.interviewer_id);const sc=s.scores,nt=s.notes;
       const ns=Object.entries(nt).filter(([k,v])=>v).map(([k,v])=>`${d.pos.dimensions.find(x=>x.key==k).name}：${v}`).join("； ");
+      const koFail=(s.knockouts||[]).filter(k=>k.fail);
+      const koStr=koFail.length?`<div class="icmt" style="border-left:3px solid var(--bad)">🚫 否决项不达标：${koFail.map(k=>k.text).join('； ')}</div>`:"";
+      const excStr=s.exceptional?`<div class="icmt" style="border-left:3px solid var(--ok)">⭐ 破格：${s.exceptional.dim||'—'} ｜ ${s.exceptional.evidence||''}</div>`:"";
       det+=`<div class="iv"><div class="ih"><span>${iv?iv.name:'未知'}</span><span class="pill ${s.recommendation==='hire'?'ok':s.recommendation==='hold'?'warn':'bad'}">${recMap[s.recommendation]}</span></div>
         <div class="isc">各维度：${d.pos.dimensions.map(x=>`${x.name} ${sc[x.key]}`).join(" / ")}</div>
-        ${ns?`<div class="icmt">📝 ${ns}</div>`:""}${s.comment?`<div class="icmt">💬 总评：${s.comment}</div>`:""}
+        ${koStr}${excStr}${ns?`<div class="icmt">📝 ${ns}</div>`:""}${s.comment?`<div class="icmt">💬 总评：${s.comment}</div>`:""}
         <div class="small" style="margin-top:4px">提交于 ${s.updated_at}</div></div>`;});det+=`</div>`;}
     html+=`<div class="cand-card"><div class="cand-head"><div><span class="nm">${idx+1}. ${d.cand.name}</span> &nbsp;<span class="small">${d.pos.name}</span></div>
-      <div>${d.n?`<span class="pill ${d.recPill}">${d.finalRec}</span> <span class="small">综合 ${d.overall??'—'} · ${d.n}人评</span>`:`<span class="pill warn">待评分</span>`}</div></div>
+      <div>${d.n?(d.knockout?`<span class="pill bad">🚫 一票否决·不建议</span>`:(d.exceptional.length?`<span class="pill ok">⭐ 破格录用</span> <span class="small">综合 ${d.overall??'—'}</span>`:`<span class="pill ${d.recPill}">${d.finalRec}</span> <span class="small">综合 ${d.overall??'—'} · ${d.n}人评</span>`)):`<span class="pill warn">待评分</span>`}</div></div>
       <div class="cand-body"><table><tr>${dimHead}</tr><tr>${dimRow}</tr></table>${det}</div></div>`;});
   $("#result-box").innerHTML=html;}
 
@@ -321,7 +353,7 @@ function mergeState(imp){if(!imp||!imp.positions)return;
     if(candKey[k]!=null){candMap[c.id]=candKey[k];}else{const nc={id:uid(S.candidates),name:c.name,position_id:lp};S.candidates.push(nc);candKey[k]=nc.id;candMap[c.id]=nc.id;}});
   (imp.scores||[]).forEach(sc=>{const ivId=ivMap[sc.interviewer_id],candId=candMap[sc.candidate_id];if(ivId==null||candId==null)return;
     const ex=S.scores.find(x=>x.interviewer_id===ivId&&x.candidate_id===candId);
-    const rec={interviewer_id:ivId,candidate_id:candId,scores:sc.scores,notes:sc.notes,recommendation:sc.recommendation,comment:sc.comment,updated_at:sc.updated_at};
+    const rec={interviewer_id:ivId,candidate_id:candId,scores:sc.scores,notes:sc.notes,recommendation:sc.recommendation,comment:sc.comment,knockouts:sc.knockouts,exceptional:sc.exceptional,updated_at:sc.updated_at};
     if(ex)Object.assign(ex,rec);else S.scores.push(rec);});}
 function resetAll(){if(!confirm("将清空本设备全部数据，确认？"))return;localStorage.removeItem(LS_KEY);S={positions:[],interviewers:[],candidates:[],scores:[]};seedIfEmpty();renderAll();toast("已清空并重置");}
 
