@@ -192,31 +192,68 @@ function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");setT
 function uid(arr){return (arr.reduce((m,x)=>Math.max(m,(x.id||0)),0))+1;}
 function posById(id){return S.positions.find(p=>p.id==id);}
 function posName(list,pid){const p=list.find(x=>x.id==pid);return p?p.name:"";}
+let lastCaForIv=null;
 
 /* ---------- 本地存储 ---------- */
-let S={positions:[],interviewers:[],candidates:[],scores:[]};
-function load(){try{const d=JSON.parse(localStorage.getItem(LS_KEY));if(d&&d.positions)return d;}catch(e){}return null;}
+let S={positions:[],interviewers:[],candidates:[],archived:[],scores:[],seedVersion:0};
+function load(){try{const d=JSON.parse(localStorage.getItem(LS_KEY));if(d&&d.positions){if(!d.seedVersion)d.seedVersion=0;if(!Array.isArray(d.archived))d.archived=[];return d;}}catch(e){}return null;}
 function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));}
-function seedIfEmpty(){if(!S.positions.length){S.positions=SEED_POSITIONS.map((p,i)=>({id:i+1,is_preset:true,...p}));save();}}
+const SEED_VERSION=2;
+function ensureSeed(){
+  let need=false;
+  if(!S.positions.length){S.positions=SEED_POSITIONS.map((p,i)=>({id:i+1,is_preset:true,...p,interviewers:[]}));need=true;}
+  if((S.seedVersion||0)<SEED_VERSION){
+    const byName={};S.positions.forEach(p=>byName[p.name]=p);
+    SEED_POSITIONS.forEach(sp=>{const ex=byName[sp.name];
+      if(ex&&ex.is_preset){ex.dimensions=sp.dimensions;ex.summary=sp.summary;ex.tag=sp.tag;}
+      else if(!ex){const np={id:uid(S.positions),is_preset:true,...sp,interviewers:[]};S.positions.push(np);byName[sp.name]=np;}});
+    S.positions.forEach(p=>{if(!Array.isArray(p.interviewers))p.interviewers=S.interviewers.map(i=>i.id);});
+    S.seedVersion=SEED_VERSION;need=true;
+  }
+  if(need)save();
+}
 
 /* ---------- 配置 ---------- */
 function renderConfig(){
-  $("#iv-list").innerHTML=S.interviewers.length?"已添加面试官："+S.interviewers.map(i=>`<span class="pill ok" style="margin:2px">${i.name}</span>`).join(" "):"尚未添加面试官";
-  $("#ca-list").innerHTML=S.candidates.length?S.candidates.map(c=>{const p=posById(c.position_id);return `<div style="margin:4px 0">· ${c.name} <span class="small">→ ${p?p.name:'未知岗位'}</span></div>`;}).join(""):"尚未添加候选人";
+  $("#iv-list").innerHTML=S.interviewers.length?"已添加面试官："+S.interviewers.map(i=>`<span class="pill ok" style="margin:2px">${i.name} <span class="delx" style="float:none;margin-left:4px" onclick="delInterviewer(${i.id})">✕</span></span>`).join(" "):"尚未添加面试官";
+  let caHtml=S.candidates.length?S.candidates.map(c=>{const p=posById(c.position_id);return `<div style="margin:4px 0">· ${c.name} <span class="small">→ ${p?p.name:'未知岗位'}</span> <span class="delx" onclick="delCandidate(${c.id})">归档</span></div>`;}).join(""):"尚未添加候选人";
+  if(S.archived.length){caHtml+='<div class="small" style="margin-top:8px;color:var(--sub)">📦 已归档（历史可查）：'+S.archived.map(a=>{const p=posById(a.position_id);return `<span style="margin:2px 6px 2px 0;display:inline-block">${a.name}<span class="small">→ ${p?p.name:'?'}</span> <span class="delx" style="float:none;margin-left:2px" onclick="restoreCandidate(${a.id})">恢复</span></span>`;}).join("")+'</div>';}
+  $("#ca-list").innerHTML=caHtml;
   $("#pos-list").innerHTML=S.positions.map(p=>{const dims=p.dimensions.map(d=>`${d.name}(${d.weight}%)`).join("、");
     const del=p.is_preset?"":`<span class="delx" onclick="delPosition(${p.id})">删除</span>`;
     const badge=p.is_preset?`<span class="pill ok" style="margin-left:6px">预置</span>`:`<span class="pill warn" style="margin-left:6px">自定义</span>`;
-    return `<div class="poscard">${del}<span class="pn">${p.name}</span>${badge}<div class="small" style="margin-top:3px">${p.tag||""}</div><div class="small" style="margin-top:3px">维度：${dims}</div></div>`;}).join("");
+    const ivChecks=S.interviewers.length?S.interviewers.map(i=>`<label style="margin:2px 8px 2px 0;font-size:12px;font-weight:400"><input type="checkbox" class="pos-iv" data-pid="${p.id}" value="${i.id}" ${((p.interviewers||[]).includes(i.id))?'checked':''} onchange="togglePosIv(${p.id},${i.id},this.checked)">${i.name}</label>`).join(""):"（请先添加面试官）";
+    return `<div class="poscard">${del}<span class="pn">${p.name}</span>${badge}<div class="small" style="margin-top:3px">${p.tag||""}</div><div class="small" style="margin-top:3px">维度：${dims}</div><div class="small" style="margin-top:6px;color:var(--primary)">分配面试官：</div><div class="pos-iv-box">${ivChecks}</div></div>`;}).join("");
   const iv=$("#sel-iv");const cur=iv.value;iv.innerHTML="";S.interviewers.forEach(i=>{iv.appendChild(new Option(i.name,i.id));});if(cur)iv.value=cur;
   const ca=$("#sel-ca");const curc=ca.value;ca.innerHTML="";S.candidates.forEach(c=>{const p=posById(c.position_id);ca.appendChild(new Option(c.name+"（"+(p?p.name:"?")+"）",c.id));});if(curc)ca.value=curc;
   const cp=$("#ca-pos");cp.innerHTML="";S.positions.forEach(p=>cp.appendChild(new Option(p.name,p.id)));
+  lastCaForIv=null;
   if($("#sel-iv").value&&$("#sel-ca").value)renderScoreForm();
 }
 function addInterviewer(){const n=$("#iv-name").value.trim();if(!n){toast("请输入姓名");return;}
   if(S.interviewers.some(i=>i.name===n)){toast("该面试官已存在");return;}
-  S.interviewers.push({id:uid(S.interviewers),name:n});save();$("#iv-name").value="";toast("已添加");renderConfig();}
+  const id=uid(S.interviewers);S.interviewers.push({id,name:n});
+  S.positions.forEach(p=>{if(!Array.isArray(p.interviewers))p.interviewers=[];p.interviewers.push(id);});
+  save();$("#iv-name").value="";toast("已添加（已分配至全部岗位，可在岗位下取消）");renderConfig();}
 function addCandidate(){const n=$("#ca-name").value.trim();const p=+$("#ca-pos").value;if(!n){toast("请输入姓名");return;}
   if(!p){toast("请选择应聘岗位");return;}S.candidates.push({id:uid(S.candidates),name:n,position_id:p});save();$("#ca-name").value="";toast("已添加");renderConfig();}
+function delInterviewer(id){const iv=S.interviewers.find(i=>i.id==id);if(!iv)return;
+  if(!confirm(`确认移除面试官「${iv.name}」？\n已提交的评分记录将保留（署名归档），仅从当前名单与岗位分配中移除。`))return;
+  S.interviewers=S.interviewers.filter(i=>i.id!=id);
+  S.positions.forEach(p=>{if(Array.isArray(p.interviewers))p.interviewers=p.interviewers.filter(x=>x!=id);});
+  save();toast("已移除面试官（历史评分保留）");renderConfig();renderResult();}
+function delCandidate(id){const c=S.candidates.find(x=>x.id==id);if(!c)return;
+  if(!confirm(`确认将候选人「${c.name}」归档？\n其全部评分记录将保留可查，仅移出当前名单。`))return;
+  S.archived.push({id:c.id,name:c.name,position_id:c.position_id,archived_at:new Date().toLocaleString()});
+  S.candidates=S.candidates.filter(x=>x.id!=id);save();toast("已归档（历史评分保留）");renderConfig();renderResult();}
+function restoreCandidate(id){const a=S.archived.find(x=>x.id==id);if(!a)return;
+  if(S.candidates.some(c=>c.id==id)){toast("该候选人已在当前名单");return;}
+  S.candidates.push({id:a.id,name:a.name,position_id:a.position_id});
+  S.archived=S.archived.filter(x=>x.id!=id);save();toast("已恢复");renderConfig();renderResult();}
+function togglePosIv(pid,iid,checked){const p=posById(pid);if(!p)return;if(!Array.isArray(p.interviewers))p.interviewers=[];
+  if(checked){if(!p.interviewers.includes(iid))p.interviewers.push(iid);}
+  else{p.interviewers=p.interviewers.filter(x=>x!=iid);}
+  save();}
 function delPosition(id){const p=posById(id);if(p.is_preset){toast("预置岗位不可删除");return;}
   if(!confirm("删除该自定义岗位将同时删除其下候选人与评分，确认？"))return;
   S.candidates=S.candidates.filter(c=>c.position_id!=id);
@@ -241,9 +278,18 @@ function savePosition(){const name=$("#np-name").value.trim();if(!name){toast("�
   $("#np-name").value="";$("#np-tag").value="";$("#np-summary").value="";$("#np-dims").innerHTML="";$("#new-pos").style.display="none";toast("岗位已保存 ✔");renderConfig();}
 
 /* ---------- 评分：整张结构化面试表内联 ---------- */
-function renderScoreForm(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
-  if(!caId||!ivId){$("#score-form").innerHTML="";$("#score-status").textContent="";return;}
-  const cand=S.candidates.find(c=>c.id==caId),pos=posById(cand.position_id);
+function renderScoreForm(){const caId=+$("#sel-ca").value;
+  const cand=caId?S.candidates.find(c=>c.id==caId):null;
+  if(!cand){$("#score-form").innerHTML="";$("#score-status").textContent="请选择候选人";return;}
+  const pos=posById(cand.position_id);
+  /* 仅显示该岗位分配的面试官；切换候选人时重建下拉 */
+  if(caId!==lastCaForIv){const ivSel=$("#sel-iv");const prev=ivSel.value;
+    const filtered=(pos.interviewers&&pos.interviewers.length)?pos.interviewers.map(id=>S.interviewers.find(i=>i.id==id)).filter(Boolean):S.interviewers;
+    ivSel.innerHTML="";filtered.forEach(i=>ivSel.appendChild(new Option(i.name,i.id)));
+    if(filtered.some(i=>String(i.id)===String(prev)))ivSel.value=prev;else if(filtered.length)ivSel.value=filtered[0].id;
+    lastCaForIv=caId;}
+  const ivId=+$("#sel-iv").value;
+  if(!ivId){$("#score-form").innerHTML="";$("#score-status").textContent="请选择面试官";return;}
   const existing=S.scores.find(s=>s.interviewer_id==ivId&&s.candidate_id==caId);
   let html=`<div class="card"><span class="tag">${pos.tag||""}</span><h3>${cand.name} · ${pos.name}</h3><div class="small">${pos.summary||""}</div></div>`;
   pos.dimensions.forEach((d,idx)=>{let sv="",note="";
@@ -298,12 +344,13 @@ function submitScore(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
   const excDim=$("#exc-dim").value.trim();const excEv=$("#exc-evidence").value.trim();
   const exceptional=excDim||excEv?{dim:excDim,evidence:excEv}:null;
   const ex=S.scores.find(s=>s.interviewer_id==ivId&&s.candidate_id==caId);
-  const rec2={interviewer_id:ivId,candidate_id:caId,scores,notes,recommendation:rec.value,comment,knockouts,exceptional,updated_at:new Date().toLocaleString()};
+  const ivName=(S.interviewers.find(i=>i.id==ivId)||{}).name||"";
+  const rec2={interviewer_id:ivId,candidate_id:caId,interviewer_name:ivName,scores,notes,recommendation:rec.value,comment,knockouts,exceptional,updated_at:new Date().toLocaleString()};
   if(ex)Object.assign(ex,rec2);else S.scores.push(rec2);
   save();toast("提交成功 ✔");renderScoreForm();renderResult();}
 
 /* ---------- 结果：自动加权汇总 ---------- */
-function aggregate(){return S.candidates.map(c=>{const pos=posById(c.position_id);const scs=S.scores.filter(s=>s.candidate_id==c.id);
+function aggregate(){return [...S.candidates,...S.archived].map(c=>{const pos=posById(c.position_id);const scs=S.scores.filter(s=>s.candidate_id==c.id);
   const dimAvg={};pos.dimensions.forEach(d=>dimAvg[d.key]=null);
   if(scs.length)pos.dimensions.forEach(d=>{const vals=scs.map(s=>s.scores[d.key]).filter(v=>typeof v==='number');dimAvg[d.key]=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length):null;});
   let overall=0,wsum=0;pos.dimensions.forEach(d=>{if(dimAvg[d.key]!=null){overall+=dimAvg[d.key]*d.weight;wsum+=d.weight;}});
@@ -322,16 +369,17 @@ function renderResult(){const data=aggregate();
   const recMap={hire:"建议录用",hold:"待定",reject:"不建议录用"};let html="";
   data.forEach((d,idx)=>{let dimHead=`<th class="l">维度</th>`+d.pos.dimensions.map(x=>`<th>${x.name}<br><span class="small">${x.weight}%</span></th>`).join("")+`<th>综合</th>`;
     let dimRow=`<td class="l">平均分</td>`+d.pos.dimensions.map(x=>{const v=d.dimAvg[x.key];if(v==null)return`<td>—</td>`;const cls=v>=4?"ok":v>=3?"warn":"bad";return`<td><span class="pill ${cls}">${v.toFixed(2)}</span></td>`;}).join("")+`<td><span class="scorebig" style="color:${d.overall>=4?'var(--ok)':d.overall>=3?'var(--warn)':'var(--bad)'}">${d.overall??'—'}</span></td>`;
-    let det="";if(d.scs.length){det=`<div class="detail">`;d.scs.forEach(s=>{const iv=S.interviewers.find(i=>i.id==s.interviewer_id);const sc=s.scores,nt=s.notes;
+    let det="";if(d.scs.length){det=`<div class="detail">`;d.scs.forEach(s=>{const ivName=s.interviewer_name||(S.interviewers.find(i=>i.id==s.interviewer_id)||{}).name;const sc=s.scores,nt=s.notes;
       const ns=Object.entries(nt).filter(([k,v])=>v).map(([k,v])=>`${d.pos.dimensions.find(x=>x.key==k).name}：${v}`).join("； ");
       const koFail=(s.knockouts||[]).filter(k=>k.fail);
       const koStr=koFail.length?`<div class="icmt" style="border-left:3px solid var(--bad)">🚫 否决项不达标：${koFail.map(k=>k.text).join('； ')}</div>`:"";
       const excStr=s.exceptional?`<div class="icmt" style="border-left:3px solid var(--ok)">⭐ 破格：${s.exceptional.dim||'—'} ｜ ${s.exceptional.evidence||''}</div>`:"";
-      det+=`<div class="iv"><div class="ih"><span>${iv?iv.name:'未知'}</span><span class="pill ${s.recommendation==='hire'?'ok':s.recommendation==='hold'?'warn':'bad'}">${recMap[s.recommendation]}</span></div>
+      det+=`<div class="iv"><div class="ih"><span>${ivName||'未知'}</span><span class="pill ${s.recommendation==='hire'?'ok':s.recommendation==='hold'?'warn':'bad'}">${recMap[s.recommendation]}</span></div>
         <div class="isc">各维度：${d.pos.dimensions.map(x=>`${x.name} ${sc[x.key]}`).join(" / ")}</div>
         ${koStr}${excStr}${ns?`<div class="icmt">📝 ${ns}</div>`:""}${s.comment?`<div class="icmt">💬 总评：${s.comment}</div>`:""}
         <div class="small" style="margin-top:4px">提交于 ${s.updated_at}</div></div>`;});det+=`</div>`;}
-    html+=`<div class="cand-card"><div class="cand-head"><div><span class="nm">${idx+1}. ${d.cand.name}</span> &nbsp;<span class="small">${d.pos.name}</span></div>
+    const isArch=S.archived.some(a=>a.id==d.cand.id);
+    html+=`<div class="cand-card"><div class="cand-head"><div><span class="nm">${idx+1}. ${d.cand.name}</span> &nbsp;<span class="small">${d.pos.name}</span>${isArch?' <span class="pill" style="background:#eef0f3;color:#8a93a3">📦 已归档</span>':''}</div>
       <div>${d.n?(d.knockout?`<span class="pill bad">🚫 一票否决·不建议</span>`:(d.exceptional.length?`<span class="pill ok">⭐ 破格录用</span> <span class="small">综合 ${d.overall??'—'}</span>`:`<span class="pill ${d.recPill}">${d.finalRec}</span> <span class="small">综合 ${d.overall??'—'} · ${d.n}人评</span>`)):`<span class="pill warn">待评分</span>`}</div></div>
       <div class="cand-body"><table><tr>${dimHead}</tr><tr>${dimRow}</tr></table>${det}</div></div>`;});
   $("#result-box").innerHTML=html;}
@@ -353,9 +401,9 @@ function mergeState(imp){if(!imp||!imp.positions)return;
     if(candKey[k]!=null){candMap[c.id]=candKey[k];}else{const nc={id:uid(S.candidates),name:c.name,position_id:lp};S.candidates.push(nc);candKey[k]=nc.id;candMap[c.id]=nc.id;}});
   (imp.scores||[]).forEach(sc=>{const ivId=ivMap[sc.interviewer_id],candId=candMap[sc.candidate_id];if(ivId==null||candId==null)return;
     const ex=S.scores.find(x=>x.interviewer_id===ivId&&x.candidate_id===candId);
-    const rec={interviewer_id:ivId,candidate_id:candId,scores:sc.scores,notes:sc.notes,recommendation:sc.recommendation,comment:sc.comment,knockouts:sc.knockouts,exceptional:sc.exceptional,updated_at:sc.updated_at};
+    const rec={interviewer_id:ivId,candidate_id:candId,interviewer_name:sc.interviewer_name,scores:sc.scores,notes:sc.notes,recommendation:sc.recommendation,comment:sc.comment,knockouts:sc.knockouts,exceptional:sc.exceptional,updated_at:sc.updated_at};
     if(ex)Object.assign(ex,rec);else S.scores.push(rec);});}
-function resetAll(){if(!confirm("将清空本设备全部数据，确认？"))return;localStorage.removeItem(LS_KEY);S={positions:[],interviewers:[],candidates:[],scores:[]};seedIfEmpty();renderAll();toast("已清空并重置");}
+function resetAll(){if(!confirm("将清空本设备全部数据，确认？"))return;localStorage.removeItem(LS_KEY);S={positions:[],interviewers:[],candidates:[],archived:[],scores:[],seedVersion:0};ensureSeed();renderAll();toast("已清空并重置");}
 
 /* ---------- 协作链接（URL hash 编码，零服务器） ---------- */
 function b64encode(obj){return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));}
@@ -375,8 +423,8 @@ function copyScoresLink(){const slice={positions:exportPositions(),interviewers:
   const h="#sc="+b64encode(slice);if(h.length>30000){toast("评分较多，请用『导出评分』JSON发HR");return;}
   copyText(linkWith(h));toast("评分链接已复制，发回HR即可");}
 function tryHash(){const h=location.hash;
-  if(h.indexOf("#cfg=")===0){try{mergeState(b64decode(h.slice(5)));save();cleanHash();toast("已载入协作配置 ✔");}catch(e){toast("链接解析失败");}}
-  else if(h.indexOf("#sc=")===0){try{mergeState(b64decode(h.slice(4)));save();cleanHash();toast("已合并评分 ✔");}catch(e){toast("链接解析失败");}}}
+  if(h.indexOf("#cfg=")===0){try{mergeState(b64decode(h.slice(5)));save();cleanHash();renderAll();toast("已载入协作配置 ✔");}catch(e){toast("链接解析失败");}}
+  else if(h.indexOf("#sc=")===0){try{mergeState(b64decode(h.slice(4)));save();cleanHash();renderAll();toast("已合并评分 ✔");}catch(e){toast("链接解析失败");}}}
 function cleanHash(){history.replaceState(null,"",location.pathname+location.search);}
 
 /* ---------- 渲染调度 ---------- */
@@ -384,7 +432,7 @@ function renderAll(){renderConfig();renderResult();}
 document.querySelectorAll("nav button").forEach(b=>{b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));$("#v-"+b.dataset.v).classList.add("on");};});
 $("#sel-iv").onchange=renderScoreForm;$("#sel-ca").onchange=renderScoreForm;
-(function init(){S=load()||S;seedIfEmpty();renderAll();tryHash();})();
+(function init(){S=load()||S;ensureSeed();renderAll();tryHash();})();
 </script>
 </body>
 </html>
