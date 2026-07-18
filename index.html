@@ -487,12 +487,13 @@ function cleanHash(){history.replaceState(null,"",location.pathname+location.sea
 /* ---------- GitHub 当云端（零部署） ---------- */
 function blankState(){return {positions:[],interviewers:[],candidates:[],archived:[],scores:[]};}
 function ghApi(path,opts){const h={"Authorization":"Bearer "+(GH_TOKEN||S.cloud.token),"Accept":"application/vnd.github+json"};if(opts&&opts.body)h["Content-Type"]="application/json";return fetch("https://api.github.com/"+path,Object.assign({},opts,{headers:h}));}
-function ghRead(){return ghApi("repos/"+encodeURIComponent(GH_REPO)+"/contents/"+encodeURIComponent(GH_FILE)).then(r=>{
+function ghUrl(){return "repos/"+GH_REPO+"/contents/"+encodeURIComponent(GH_FILE);}
+function ghRead(){return ghApi(ghUrl()).then(r=>{
   if(r.status===404)return {sha:null,state:blankState()};
   if(!r.ok)return r.text().then(t=>{throw new Error("读取失败("+r.status+"): "+t.slice(0,120));});
   return r.json().then(j=>({sha:j.sha,state:JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}));});}
 function ghWrite(state,sha){const body={message:"hr-interview update",content:btoa(unescape(encodeURIComponent(JSON.stringify(state))))};if(sha)body.sha=sha;
-  return ghApi("repos/"+encodeURIComponent(GH_REPO)+"/contents/"+encodeURIComponent(GH_FILE),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error("写入失败("+r.status+"): "+t.slice(0,120));});return r.json();});}
+  return ghApi(ghUrl(),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error("写入失败("+r.status+"): "+t.slice(0,120));});return r.json();});}
 /* 面试官提交：读回云端 → 合并该评分(并按id补齐候选人/岗位/面试官) → 写回 */
 function cloudPushScore(rec){return ghRead().then(({sha,state})=>{
   const st=(state&&state.scores)?state:blankState();
