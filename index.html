@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>招聘结构化面试 · 评分与汇总</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#fff; --primary:#2f6fed; --primary-d:#1f53c0; --primary-l:#eef3ff;
+    --text:#1f2733; --sub:#6b7686; --line:#e6eaf1; --ok:#1faa6b; --warn:#e8912d; --bad:#e25555;
+    --shadow:0 2px 10px rgba(30,50,90,.08);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--text);font-size:15px;line-height:1.5}
+  header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);
+         padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  header .t{font-weight:700;font-size:16px}
+  header .live{font-size:12px;color:var(--sub)}
+  nav{display:flex;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:46px;z-index:19}
+  nav button{flex:1;border:0;background:none;padding:12px 0;font-size:15px;color:var(--sub);font-weight:600;position:relative}
+  nav button.on{color:var(--primary)}
+  nav button.on::after{content:"";position:absolute;left:25%;right:25%;bottom:0;height:3px;background:var(--primary);border-radius:3px 3px 0 0}
+  main{padding:14px;max-width:860px;margin:0 auto;padding-bottom:70px}
+  .view{display:none} .view.on{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 8px;font-size:15px}
+  label{font-size:13px;color:var(--sub);display:block;margin:10px 0 4px}
+  input[type=text],select,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;
+       font-size:15px;background:#fff;color:var(--text);font-family:inherit}
+  textarea{resize:vertical;min-height:54px}
+  .btn{background:var(--primary);color:#fff;border:0;border-radius:9px;padding:11px 16px;font-size:15px;font-weight:600;width:100%;margin-top:12px}
+  .btn:active{background:var(--primary-d)} .btn.ghost{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+  .btn.sm{width:auto;padding:8px 12px;font-size:13px;margin:0}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row>*{flex:1;min-width:120px}
+  .tag{display:inline-block;background:var(--primary-l);color:var(--primary);border-radius:20px;padding:2px 10px;font-size:12px;margin-bottom:6px}
+  .dim{border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:12px}
+  .dim .dh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .dim .dn{font-weight:700;font-size:14px}
+  .w{background:#fdeede;color:var(--warn);border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;white-space:nowrap}
+  .ind{font-size:13px;color:var(--sub);margin:6px 0}
+  .qtitle{font-size:12px;color:var(--primary);font-weight:700;margin:8px 0 4px}
+  .q{background:#fafbff;border-left:3px solid var(--primary);padding:7px 10px;font-size:13px;color:#46506a;border-radius:0 8px 8px 0;margin:5px 0}
+  .sco{display:flex;gap:6px;margin-top:8px}
+  .sco label{flex:1;margin:0}
+  .sco input{display:none}
+  .sco span{display:block;text-align:center;border:1px solid var(--line);border-radius:8px;padding:9px 0;font-size:14px;color:var(--sub);cursor:pointer}
+  .sco input:checked+span{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:700}
+  .rec{display:flex;gap:8px;margin-top:6px}
+  .rec label{flex:1;margin:0}
+  .rec input{display:none}
+  .rec span{display:block;text-align:center;border:1px solid var(--line);border-radius:8px;padding:9px 0;font-size:14px;cursor:pointer}
+  .rec input:checked+span.hire{background:var(--ok);color:#fff;border-color:var(--ok)}
+  .rec input:checked+span.hold{background:var(--warn);color:#fff;border-color:var(--warn)}
+  .rec input:checked+span.reject{background:var(--bad);color:#fff;border-color:var(--bad)}
+  .muted{color:var(--sub);font-size:13px}
+  .pill{display:inline-block;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
+  .pill.ok{background:#e7f7ef;color:var(--ok)} .pill.warn{background:#fdf0e0;color:var(--warn)} .pill.bad{background:#fdeaea;color:var(--bad)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid var(--line);padding:7px 8px;text-align:center}
+  th{background:#f7f9fc;color:var(--sub);font-weight:600}
+  td.l,th.l{text-align:left}
+  .cand-card{border:1px solid var(--line);border-radius:12px;padding:0;margin-bottom:14px;overflow:hidden}
+  .cand-head{background:#f7f9fc;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+  .cand-head .nm{font-weight:700;font-size:16px}
+  .cand-body{padding:12px 14px}
+  .scorebig{font-size:26px;font-weight:800}
+  .detail{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+  .iv{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px}
+  .iv .ih{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:4px}
+  .iv .isc{font-size:12px;color:var(--sub)}
+  .iv .icmt{font-size:12.5px;color:#46506a;margin-top:5px;background:#fafbff;border-radius:7px;padding:6px 8px}
+  .empty{text-align:center;color:var(--sub);padding:30px 10px}
+  .toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#1f2733;color:#fff;
+         padding:10px 18px;border-radius:24px;font-size:14px;opacity:0;transition:.25s;z-index:50;max-width:90%}
+  .toast.on{opacity:1}
+  .small{font-size:12px;color:var(--sub)}
+  .poscard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .poscard .pn{font-weight:700}
+  .dimrow{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:#fbfcfe}
+  .delx{color:var(--bad);font-size:13px;cursor:pointer;float:right}
+  @media print{
+    header,nav,main>.card:first-child,.btn,.toast,.noprint{display:none!important}
+    body{background:#fff}
+    .cand-card{break-inside:avoid;box-shadow:none}
+    main{padding:0;max-width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="t">招聘结构化面试 · 评分与汇总</div>
+  <div class="live">本地保存 · 微信传文件合并</div>
+</header>
+<nav>
+  <button data-v="cfg" class="on">① 配置</button>
+  <button data-v="score">② 评分</button>
+  <button data-v="result">③ 结果</button>
+</nav>
+<main>
+  <!-- 配置 -->
+  <section class="view on" id="v-cfg">
+    <div class="card">
+      <h3>添加面试官</h3>
+      <div class="row">
+        <input type="text" id="iv-name" placeholder="面试官姓名（如：徐尧/张总）">
+        <button class="btn sm" style="flex:0 0 auto;margin-top:0" onclick="addInterviewer()">添加</button>
+      </div>
+      <div id="iv-list" class="muted" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h3>添加候选人</h3>
+      <label>候选人姓名</label>
+      <input type="text" id="ca-name" placeholder="候选人姓名">
+      <label>应聘岗位（预置可选，也可下方「管理岗位」新增）</label>
+      <select id="ca-pos"></select>
+      <button class="btn" onclick="addCandidate()">添加候选人</button>
+      <div id="ca-list" class="muted" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h3>管理岗位</h3>
+      <div id="pos-list"></div>
+      <button class="btn ghost noprint" onclick="toggleNewPos()">＋ 新增面试岗位</button>
+      <div id="new-pos" class="card" style="display:none;background:#fbfcfe">
+        <label>岗位名称</label>
+        <input type="text" id="np-name" placeholder="如：无人机整机销售">
+        <label>标签（可选）</label>
+        <input type="text" id="np-tag" placeholder="如：行业经验优先">
+        <label>岗位简介（可选）</label>
+        <textarea id="np-summary" placeholder="一句话说明岗位定位与考察重点"></textarea>
+        <div id="np-dims"></div>
+        <button class="btn sm ghost" style="width:auto" onclick="addDimRow()">＋ 添加维度</button>
+        <button class="btn" onclick="savePosition()">保存岗位</button>
+      </div>
+    </div>
+    <div class="card noprint">
+      <h3>多人协作（零服务器 · 微信发链接即可）</h3>
+      <div class="small" style="margin-bottom:8px">
+        <b>流程</b>：① HR 点「复制协作链接」发面试官 → ② 面试官打开链接评分，点「复制我的评分链接」回传 → ③ HR 打开回传链接即<b>自动合并汇总</b>。<br>
+        若链接过长被截断，可改用「导出配置 / 导出评分」JSON 文件经微信发送，再「导入并合并」。
+      </div>
+      <div class="row">
+        <button class="btn sm ghost" style="margin:0" onclick="copyConfigLink()">复制协作链接</button>
+        <button class="btn sm ghost" style="margin:0" onclick="copyScoresLink()">复制我的评分链接</button>
+        <button class="btn sm ghost" style="margin:0" onclick="document.getElementById('imp').click()">导入并合并</button>
+        <button class="btn sm" style="margin:0;background:#eee;color:#a33" onclick="resetAll()">清空</button>
+      </div>
+      <input type="file" id="imp" accept="application/json" style="display:none" onchange="importData(event)">
+    </div>
+  </section>
+
+  <!-- 评分 -->
+  <section class="view" id="v-score">
+    <div class="card">
+      <div class="row">
+        <div><label>我是（面试官）</label><select id="sel-iv"></select></div>
+        <div><label>候选人</label><select id="sel-ca"></select></div>
+      </div>
+      <div id="score-status" class="small" style="margin-top:8px"></div>
+    </div>
+    <div id="score-form"></div>
+    <button class="btn" onclick="submitScore()">提交评分</button>
+    <div class="card noprint" style="margin-top:14px">
+      <h3>STAR 评分指引</h3>
+      <div class="small">
+        <b>S</b> 场景：当时业务背景？&nbsp; <b>T</b> 任务：你个人专属目标？<br>
+        <b>A</b> 行动：你独立落地的具体动作？&nbsp; <b>R</b> 结果：最终量化成果？<br>
+        评分基于回答的<b>具体性、真实性、量化程度</b>，避免光环效应。
+      </div>
+    </div>
+  </section>
+
+  <!-- 结果 -->
+  <section class="view" id="v-result">
+    <div class="card noprint" style="display:flex;gap:8px;align-items:center">
+      <button class="btn sm ghost" style="margin:0" onclick="window.print()">🖨 打印 / 导出PDF</button>
+      <span class="small" id="result-meta"></span>
+    </div>
+    <div id="result-box"><div class="empty">暂无数据，请先配置并评分。</div></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 预置岗位（SEED） ---------- */
+const SEED_POSITIONS=[
+ {name:"风扇灯外贸业务员",tag:"有风扇灯/照明/家居类外贸经验即可",
+  summary:"负责风扇灯及相关家居照明产品的海外B2B销售，独立操盘从询盘到收款的外贸全流程。重点考察外贸全流程熟练度、产品与行业认知、客户开发能力、语言沟通、订单风控与稳定性。",
+  dimensions:[
+   {key:"industry_exp",name:"行业外贸经验匹配度",weight:20,indicator:"熟悉外贸全流程（询盘→报价→PI→收款→生产跟进→报关单证→售后）；有风扇灯/照明/家居类经验。",
+    star:["S/T：请分享一段你独立负责风扇灯（或家居照明）外贸业务的经历，当时的业务背景和你的个人目标是什么？","A：你是如何独立处理从询盘到收款全流程的？用了哪些平台/渠道（阿里国际站、Made-in-China、展会、独立站）？","R：那段经历中你累计开发了多少客户 / 年出口额 / 询盘转化率是多少？","补充：你是否独立操作过信用证（L/C）审单？处理过哪些单证（发票、装箱单、提单、产地证）？"]},
+   {key:"product_knowledge",name:"产品理解与行业认知",weight:15,indicator:"了解风扇灯结构（电机、扇叶、灯源、遥控）、CE/ROHS等认证及欧美/中东市场偏好。",
+    star:["S/T：描述一次你需要向海外客户讲清风扇灯卖点或处理技术疑问的场景，背景与目标？","A：你具体如何组织产品话术、对比竞品、解答认证/参数问题？","R：这次沟通对成交或客户信任产生了什么结果（如拿下订单、消除疑虑）？"]},
+   {key:"customer_dev",name:"客户开发与渠道运用",weight:20,indicator:"熟练运用B2B平台、展会、社媒（LinkedIn、Facebook）主动开发，有完整开发闭环。",
+    star:["S/T：讲述你从0开发一个新海外客户的经历，当时面临什么业务背景？你的目标是什么？","A：你具体用了哪些渠道与动作（搜索、开发信、加好友、样品）？开发周期多长？","R：最终该客户成交额、复购或带来的后续价值是多少？"]},
+   {key:"communication",name:"沟通谈判与语言能力",weight:15,indicator:"英文邮件/电话/视频谈判流畅，具备跨文化沟通与议价能力。",
+    star:["S/T：分享一次你通过谈判挽回订单或争取更好付款条件（如提高定金比例）的经历，背景是？","A：你在邮件/会议中具体用了什么策略说服对方？","R：最终条款或订单结果发生了什么改变？"]},
+   {key:"risk_control",name:"订单执行与风险控制",weight:15,indicator:"能识别并处置交期延误、质量客诉、汇率与收款风险。",
+    star:["S/T：一次你遇到交期延误/质量客诉/收款风险的经历，当时的情况与你的职责是？","A：你具体采取了哪些动作（预警、协调工厂、补发、分期收款）？","R：最终损失是否被控制、客户是否保留？量化结果是什么？"]},
+   {key:"stability",name:"职业稳定性与求职动机",weight:15,indicator:"离职原因合理、稳定性强，认同行业/公司与所在地。",
+    star:["S/T：你为什么离开上一家？为什么选择风扇灯外贸/我们公司这个岗位？","A：你为自己设定了怎样的短期成长目标？","R：你预期能稳定贡献多久？过往平均在职时长是多少？"]}
+  ]},
+ {name:"无人机动力套销售人员",tag:"行业内销售经验，懂产品，有渠道和客户资源优先",
+  summary:"负责无人机动力套（电机、电调、螺旋桨、电池、飞控）的B端销售，属技术型/方案式销售。重点考察产品专业度、可迁移的客户与渠道资源、谈判能力、方案式销售与市场洞察。",
+  dimensions:[
+   {key:"product_expert",name:"行业与产品专业度",weight:25,indicator:"精通无人机动力系统构成与参数（KV值、推力、效率、兼容性），能为不同机型选型。",
+    star:["S/T：描述一次你为不同机型/客户推荐动力套方案并讲清技术优劣的经历，背景与目标？","A：你如何根据载重、续航、机型匹配电机/电调/桨叶？讲了哪些参数？","R：客户是否采纳你的方案？带来了多少成交或技术信任？"]},
+   {key:"sales_resource",name:"销售业绩与渠道资源",weight:20,indicator:"有可量化的历史业绩，掌握可迁移的客户/渠道资源（代理商、整机厂、行业用户）。",
+    star:["S/T：你过往的销售业绩规模是多少？当时你在什么平台/体系下？","A：你带来或掌握哪些可直接迁移的客户与渠道资源？如何证明？","R：这些资源预计能为新岗位带来多少潜在业绩（客户数/年销售额）？"]},
+   {key:"customer_dev",name:"客户开发与谈判能力",weight:15,indicator:"具备从陌生到成交的行业客户开发闭环与议价能力。",
+    star:["S/T：讲述一个你从陌生接触到达成交易的行业客户经历，背景与你的目标？","A：你如何触达、建立信任、报价与逼单？","R：该客户合同额、回款与后续复购情况如何？"]},
+   {key:"solution_sell",name:"解决方案式销售能力",weight:15,indicator:"能用技术方案（试用、定制、答疑）打动客户，而非单纯拼价格。",
+    star:["S/T：一次你用技术方案打动并拿下客户的经历，当时卡点与你的目标？","A：你提供了哪些技术验证/试用/对比数据？","R：最终是否成交？客单价或利润是否优于纯价格竞争？"]},
+   {key:"market_insight",name:"市场洞察与竞品分析",weight:10,indicator:"了解主流动力套品牌（T-Motor、好盈、中特威等）与价格带，能制定差异化打法。",
+    star:["S/T：你如何分析竞品并制定差异化销售策略？当时市场背景是？","A：你具体对比了哪些品牌/参数/价格？定位了什么差异点？","R：该打法带来了多少份额或毛利提升？"]},
+   {key:"motivation",name:"职业动机与抗压",weight:15,indicator:"资源型销售的稳定性、目标感与高压下的自我驱动。",
+    star:["S/T：你带资源加入新平台的期望是什么？你评估过哪些风险？","A：你为自己设定了怎样的业绩目标与时间表？","R：你过去在业绩高压下如何保持产出？结果如何？"]}
+  ]},
+ {name:"无人机动力套跨境电商运营",tag:"0到1搭建阶段，1年以上经验，懂平台/社媒/后台/推广",
+  summary:"从0到1搭建无人机动力套的跨境电商业务，覆盖选品、开店、上架、社媒引流、广告投放与内容推广。重点考察平台实操、0到1搭建能力、社媒流量获取、数据分析和内容推广。",
+  dimensions:[
+   {key:"platform_op",name:"跨境电商平台实操",weight:20,indicator:"独立运营过 Amazon/eBay/AliExpress/Shopify/速卖通 等，熟悉开店、上架、后台。",
+    star:["S/T：你独立运营过哪些平台？当时店铺的业务背景与你的目标？","A：从开店、选品、上架到出单，你具体做了哪些后台操作？","R：该店铺/账号的销售额、出单周期与转化率是多少？"]},
+   {key:"build_0to1",name:"0到1搭建能力",weight:20,indicator:"具备从选品、店铺搭建到运营流程从0建立的完整经验。",
+    star:["S/T：一次你从0到1搭建店铺/账号的经历，起点与你要达成的目标？","A：你如何做市场调研、供应链对接、流程SOP搭建？","R：第一个月/季度跑出了什么关键数据（曝光、出单、ROI）？"]},
+   {key:"social_traffic",name:"社媒渠道与流量获取",weight:15,indicator:"懂 FB/IG/TikTok/YouTube/Google Ads 渠道选择与自然+付费引流。",
+    star:["S/T：你如何用社媒/广告为店铺引流？当时的目标与预算？","A：你选择了哪些渠道、内容形式与投放结构？","R：带来多少曝光/点击/成交？ROI 是多少？"]},
+   {key:"data_analysis",name:"后台操作与数据分析",weight:15,indicator:"能做广告投放、转化漏斗、关键词与报表分析并据此优化。",
+    star:["S/T：一次你通过数据分析优化广告或Listing的经历，问题背景？","A：你看了哪些指标（ACOS、CTR、CVR）？做了什么调整？","R：曝光/转化/广告成本改善了多少（量化）？"]},
+   {key:"content_promo",name:"产品宣传与内容推广",weight:15,indicator:"能产出文案、短视频、主图、A+页面，并运用红人/测评推广。",
+    star:["S/T：你打造过哪个爆款或内容？当时的推广目标？","A：你如何做主图/视频/文案优化或红人合作？","R：曝光量、点击率或转化率提升了多少？"]},
+   {key:"learning_exec",name:"自主学习与执行力",weight:15,indicator:"能快速上手陌生平台/工具，并强落地执行。",
+    star:["S/T：一次你需要在短时间内上手陌生平台或工具的经历，背景与 deadline？","A：你如何自学、拆解任务并推进？","R：最终是否按时跑通并产出结果？量化产出？"]}
+  ]}
+];
+
+const LS_KEY="hr_interview_v2";
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800);}
+function uid(arr){return (arr.reduce((m,x)=>Math.max(m,(x.id||0)),0))+1;}
+function posById(id){return S.positions.find(p=>p.id==id);}
+function posName(list,pid){const p=list.find(x=>x.id==pid);return p?p.name:"";}
+
+/* ---------- 本地存储 ---------- */
+let S={positions:[],interviewers:[],candidates:[],scores:[]};
+function load(){try{const d=JSON.parse(localStorage.getItem(LS_KEY));if(d&&d.positions)return d;}catch(e){}return null;}
+function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));}
+function seedIfEmpty(){if(!S.positions.length){S.positions=SEED_POSITIONS.map((p,i)=>({id:i+1,is_preset:true,...p}));save();}}
+
+/* ---------- 配置 ---------- */
+function renderConfig(){
+  $("#iv-list").innerHTML=S.interviewers.length?"已添加面试官："+S.interviewers.map(i=>`<span class="pill ok" style="margin:2px">${i.name}</span>`).join(" "):"尚未添加面试官";
+  $("#ca-list").innerHTML=S.candidates.length?S.candidates.map(c=>{const p=posById(c.position_id);return `<div style="margin:4px 0">· ${c.name} <span class="small">→ ${p?p.name:'未知岗位'}</span></div>`;}).join(""):"尚未添加候选人";
+  $("#pos-list").innerHTML=S.positions.map(p=>{const dims=p.dimensions.map(d=>`${d.name}(${d.weight}%)`).join("、");
+    const del=p.is_preset?"":`<span class="delx" onclick="delPosition(${p.id})">删除</span>`;
+    const badge=p.is_preset?`<span class="pill ok" style="margin-left:6px">预置</span>`:`<span class="pill warn" style="margin-left:6px">自定义</span>`;
+    return `<div class="poscard">${del}<span class="pn">${p.name}</span>${badge}<div class="small" style="margin-top:3px">${p.tag||""}</div><div class="small" style="margin-top:3px">维度：${dims}</div></div>`;}).join("");
+  const iv=$("#sel-iv");const cur=iv.value;iv.innerHTML="";S.interviewers.forEach(i=>{iv.appendChild(new Option(i.name,i.id));});if(cur)iv.value=cur;
+  const ca=$("#sel-ca");const curc=ca.value;ca.innerHTML="";S.candidates.forEach(c=>{const p=posById(c.position_id);ca.appendChild(new Option(c.name+"（"+(p?p.name:"?")+"）",c.id));});if(curc)ca.value=curc;
+  const cp=$("#ca-pos");cp.innerHTML="";S.positions.forEach(p=>cp.appendChild(new Option(p.name,p.id)));
+  if($("#sel-iv").value&&$("#sel-ca").value)renderScoreForm();
+}
+function addInterviewer(){const n=$("#iv-name").value.trim();if(!n){toast("请输入姓名");return;}
+  if(S.interviewers.some(i=>i.name===n)){toast("该面试官已存在");return;}
+  S.interviewers.push({id:uid(S.interviewers),name:n});save();$("#iv-name").value="";toast("已添加");renderConfig();}
+function addCandidate(){const n=$("#ca-name").value.trim();const p=+$("#ca-pos").value;if(!n){toast("请输入姓名");return;}
+  if(!p){toast("请选择应聘岗位");return;}S.candidates.push({id:uid(S.candidates),name:n,position_id:p});save();$("#ca-name").value="";toast("已添加");renderConfig();}
+function delPosition(id){const p=posById(id);if(p.is_preset){toast("预置岗位不可删除");return;}
+  if(!confirm("删除该自定义岗位将同时删除其下候选人与评分，确认？"))return;
+  S.candidates=S.candidates.filter(c=>c.position_id!=id);
+  S.scores=S.scores.filter(sc=>{const c=S.candidates.find(x=>x.id==sc.candidate_id);return c&&c.position_id!=id;});
+  S.positions=S.positions.filter(x=>x.id!=id);save();toast("已删除");renderConfig();}
+function toggleNewPos(){const e=$("#new-pos");const show=e.style.display==="none";e.style.display=show?"block":"none";if(show&&!$("#np-dims").children.length){addDimRow();addDimRow();addDimRow();}}
+function addDimRow(){const d=$("#np-dims");const div=document.createElement("div");div.className="dimrow";
+  div.innerHTML=`<div class="delx" onclick="this.parentNode.remove()">✕</div>
+    <div class="row"><div><label>维度名称</label><input type="text" class="d-name" placeholder="如：产品专业度"></div>
+    <div style="flex:0 0 90px"><label>权重%</label><input type="number" class="d-weight" placeholder="25" min="1" max="100"></div></div>
+    <label>评分要点</label><textarea class="d-ind" placeholder="该维度考察什么"></textarea>
+    <label>STAR 面试问题（每行一个问题）</label><textarea class="d-star" placeholder="S/T：…\nA：…\nR：…"></textarea>`;
+  d.appendChild(div);}
+function savePosition(){const name=$("#np-name").value.trim();if(!name){toast("请输入岗位名称");return;}
+  if(S.positions.some(p=>p.name===name)){toast("该岗位名称已存在");return;}
+  const dims=[];let total=0;
+  $$("#np-dims .dimrow").forEach(row=>{const dn=row.querySelector(".d-name").value.trim();const w=+row.querySelector(".d-weight").value;
+    const ind=row.querySelector(".d-ind").value.trim();const star=row.querySelector(".d-star").value.split("\n").map(s=>s.trim()).filter(Boolean);
+    if(dn){if(!w||w<=0||w>100){toast(`维度【${dn}】权重需在1-100`);throw 0;}dims.push({key:"d"+(dims.length),name:dn,weight:w,indicator:ind,star});total+=w;}});
+  if(!dims.length){toast("请至少添加一个维度");return;}if(total!==100){toast(`权重合计需为100%，当前${total}%`);return;}
+  S.positions.push({id:uid(S.positions),name,tag:$("#np-tag").value.trim(),summary:$("#np-summary").value.trim(),dimensions:dims,is_preset:false});save();
+  $("#np-name").value="";$("#np-tag").value="";$("#np-summary").value="";$("#np-dims").innerHTML="";$("#new-pos").style.display="none";toast("岗位已保存 ✔");renderConfig();}
+
+/* ---------- 评分：整张结构化面试表内联 ---------- */
+function renderScoreForm(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
+  if(!caId||!ivId){$("#score-form").innerHTML="";$("#score-status").textContent="";return;}
+  const cand=S.candidates.find(c=>c.id==caId),pos=posById(cand.position_id);
+  const existing=S.scores.find(s=>s.interviewer_id==ivId&&s.candidate_id==caId);
+  let html=`<div class="card"><span class="tag">${pos.tag||""}</span><h3>${cand.name} · ${pos.name}</h3><div class="small">${pos.summary||""}</div></div>`;
+  pos.dimensions.forEach((d,idx)=>{let sv="",note="";
+    if(existing){const sc=existing.scores,nt=existing.notes;sv=sc[d.key]||"";note=nt[d.key]||"";}
+    const qs=d.star&&d.star.length?`<div class="qtitle">面试问题（STAR）</div>`+d.star.map(q=>`<div class="q">${q}</div>`).join(""):"";
+    html+=`<div class="card dim" data-k="${d.key}"><div class="dh"><div class="dn">${idx+1}. ${d.name}</div><div class="w">权重 ${d.weight}%</div></div>
+      <div class="ind">评分要点：${d.indicator||""}</div>${qs}
+      <label style="margin-top:6px">根据回答评分</label>
+      <div class="sco">${[5,4,3,2,1].map(v=>`<label><input type="radio" name="sc_${d.key}" value="${v}" ${sv==v?'checked':''}><span>${v}</span></label>`).join("")}</div>
+      <label style="margin-top:8px">STAR 记录 / 评语（可选）</label>
+      <textarea class="note" data-k="${d.key}" placeholder="记录候选人关键回答…">${note}</textarea></div>`;});
+  let rec=existing?existing.recommendation:"";
+  html+=`<div class="card"><h3>综合录用建议</h3><div class="rec">
+      <label><input type="radio" name="rec" value="hire" ${rec==='hire'?'checked':''}><span class="hire">建议录用</span></label>
+      <label><input type="radio" name="rec" value="hold" ${rec==='hold'?'checked':''}><span class="hold">待定</span></label>
+      <label><input type="radio" name="rec" value="reject" ${rec==='reject'?'checked':''}><span class="reject">不建议</span></label></div>
+    <label>总体评语（可选）</label><textarea id="overall-comment" placeholder="该候选人的整体判断…">${existing?existing.comment:''}</textarea></div>`;
+  $("#score-form").innerHTML=html;
+  const cnt=S.scores.filter(s=>s.candidate_id==caId).length;
+  $("#score-status").innerHTML=existing?`<span class="pill ok">你已提交，可修改后重提</span> &nbsp; 当前已有 <b>${cnt}</b> 位面试官提交`:`<span class="pill warn">你尚未提交</span> &nbsp; 当前已有 <b>${cnt}</b> 位面试官提交`;}
+function submitScore(){const caId=+$("#sel-ca").value,ivId=+$("#sel-iv").value;
+  if(!caId||!ivId){toast("请先选择面试官和候选人");return;}
+  const cand=S.candidates.find(c=>c.id==caId),pos=posById(cand.position_id);
+  const scores={},notes={};let miss=false;
+  pos.dimensions.forEach(d=>{const el=document.querySelector(`input[name="sc_${d.key}"]:checked`);if(!el){miss=true;}else scores[d.key]=+el.value;
+    const nt=document.querySelector(`textarea.note[data-k="${d.key}"]`);notes[d.key]=nt?nt.value.trim():"";});
+  if(miss){toast("请完成所有维度评分");return;}
+  const rec=document.querySelector('input[name="rec"]:checked');if(!rec){toast("请选择录用建议");return;}
+  const comment=$("#overall-comment").value.trim();
+  const ex=S.scores.find(s=>s.interviewer_id==ivId&&s.candidate_id==caId);
+  const rec2={interviewer_id:ivId,candidate_id:caId,scores,notes,recommendation:rec.value,comment,updated_at:new Date().toLocaleString()};
+  if(ex)Object.assign(ex,rec2);else S.scores.push(rec2);
+  save();toast("提交成功 ✔");renderScoreForm();renderResult();}
+
+/* ---------- 结果：自动加权汇总 ---------- */
+function aggregate(){return S.candidates.map(c=>{const pos=posById(c.position_id);const scs=S.scores.filter(s=>s.candidate_id==c.id);
+  const dimAvg={};pos.dimensions.forEach(d=>dimAvg[d.key]=null);
+  if(scs.length)pos.dimensions.forEach(d=>{const vals=scs.map(s=>s.scores[d.key]).filter(v=>typeof v==='number');dimAvg[d.key]=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length):null;});
+  let overall=0,wsum=0;pos.dimensions.forEach(d=>{if(dimAvg[d.key]!=null){overall+=dimAvg[d.key]*d.weight;wsum+=d.weight;}});
+  overall=wsum?+((overall/wsum)).toFixed(2):null;
+  const finalRec=overall==null?"—":(overall>=4?"建议录用":overall>=3?"待定":"不建议录用");
+  const recPill=overall==null?"":(overall>=4?"ok":overall>=3?"warn":"bad");
+  return {cand:c,pos,scs,dimAvg,overall,finalRec,recPill,n:scs.length};});}
+function renderResult(){const data=aggregate();
+  $("#result-meta").textContent=`候选人 ${S.candidates.length} 人 · 面试官 ${S.interviewers.length} 人 · 共 ${S.scores.length} 份评分`;
+  if(!data.length){$("#result-box").innerHTML='<div class="empty">暂无数据，请先配置并评分。</div>';return;}
+  const recMap={hire:"建议录用",hold:"待定",reject:"不建议录用"};let html="";
+  data.forEach((d,idx)=>{let dimHead=`<th class="l">维度</th>`+d.pos.dimensions.map(x=>`<th>${x.name}<br><span class="small">${x.weight}%</span></th>`).join("")+`<th>综合</th>`;
+    let dimRow=`<td class="l">平均分</td>`+d.pos.dimensions.map(x=>{const v=d.dimAvg[x.key];if(v==null)return`<td>—</td>`;const cls=v>=4?"ok":v>=3?"warn":"bad";return`<td><span class="pill ${cls}">${v.toFixed(2)}</span></td>`;}).join("")+`<td><span class="scorebig" style="color:${d.overall>=4?'var(--ok)':d.overall>=3?'var(--warn)':'var(--bad)'}">${d.overall??'—'}</span></td>`;
+    let det="";if(d.scs.length){det=`<div class="detail">`;d.scs.forEach(s=>{const iv=S.interviewers.find(i=>i.id==s.interviewer_id);const sc=s.scores,nt=s.notes;
+      const ns=Object.entries(nt).filter(([k,v])=>v).map(([k,v])=>`${d.pos.dimensions.find(x=>x.key==k).name}：${v}`).join("； ");
+      det+=`<div class="iv"><div class="ih"><span>${iv?iv.name:'未知'}</span><span class="pill ${s.recommendation==='hire'?'ok':s.recommendation==='hold'?'warn':'bad'}">${recMap[s.recommendation]}</span></div>
+        <div class="isc">各维度：${d.pos.dimensions.map(x=>`${x.name} ${sc[x.key]}`).join(" / ")}</div>
+        ${ns?`<div class="icmt">📝 ${ns}</div>`:""}${s.comment?`<div class="icmt">💬 总评：${s.comment}</div>`:""}
+        <div class="small" style="margin-top:4px">提交于 ${s.updated_at}</div></div>`;});det+=`</div>`;}
+    html+=`<div class="cand-card"><div class="cand-head"><div><span class="nm">${idx+1}. ${d.cand.name}</span> &nbsp;<span class="small">${d.pos.name}</span></div>
+      <div>${d.n?`<span class="pill ${d.recPill}">${d.finalRec}</span> <span class="small">综合 ${d.overall??'—'} · ${d.n}人评</span>`:`<span class="pill warn">待评分</span>`}</div></div>
+      <div class="cand-body"><table><tr>${dimHead}</tr><tr>${dimRow}</tr></table>${det}</div></div>`;});
+  $("#result-box").innerHTML=html;}
+
+/* ---------- 数据导出 / 导入合并 ---------- */
+function download(name,obj){const b=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href);}
+function exportData(kind){if(kind==='config'){download("面试配置.json",{positions:S.positions,interviewers:S.interviewers,candidates:S.candidates});toast("已导出配置");}
+  else{download("面试评分.json",{positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,scores:S.scores});toast("已导出评分");}}
+function importData(evt){const f=evt.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const imp=JSON.parse(r.result);mergeState(imp);save();toast("已合并导入 ✔");renderAll();}catch(err){toast("文件格式错误");}};r.readAsText(f);evt.target.value="";}
+function mergeState(imp){if(!imp||!imp.positions)return;
+  const posByName={};S.positions.forEach(p=>posByName[p.name]=p.id);const posMap={};
+  imp.positions.forEach(p=>{if(posByName[p.name]!=null){posMap[p.id]=posByName[p.name];}else{const np={...p,id:uid(S.positions)};S.positions.push(np);posByName[p.name]=np.id;posMap[p.id]=np.id;}});
+  const ivByName={};S.interviewers.forEach(i=>ivByName[i.name]=i.id);const ivMap={};
+  (imp.interviewers||[]).forEach(i=>{if(ivByName[i.name]!=null){ivMap[i.id]=ivByName[i.name];}else{const ni={id:uid(S.interviewers),name:i.name};S.interviewers.push(ni);ivByName[i.name]=ni.id;ivMap[i.id]=ni.id;}});
+  const candKey={};S.candidates.forEach(c=>candKey[c.name+"|"+posName(S.positions,c.position_id)]=c.id);const candMap={};
+  (imp.candidates||[]).forEach(c=>{const pn=posName(imp.positions,c.position_id);const lp=posMap[c.position_id];const k=c.name+"|"+pn;
+    if(candKey[k]!=null){candMap[c.id]=candKey[k];}else{const nc={id:uid(S.candidates),name:c.name,position_id:lp};S.candidates.push(nc);candKey[k]=nc.id;candMap[c.id]=nc.id;}});
+  (imp.scores||[]).forEach(sc=>{const ivId=ivMap[sc.interviewer_id],candId=candMap[sc.candidate_id];if(ivId==null||candId==null)return;
+    const ex=S.scores.find(x=>x.interviewer_id===ivId&&x.candidate_id===candId);
+    const rec={interviewer_id:ivId,candidate_id:candId,scores:sc.scores,notes:sc.notes,recommendation:sc.recommendation,comment:sc.comment,updated_at:sc.updated_at};
+    if(ex)Object.assign(ex,rec);else S.scores.push(rec);});}
+function resetAll(){if(!confirm("将清空本设备全部数据，确认？"))return;localStorage.removeItem(LS_KEY);S={positions:[],interviewers:[],candidates:[],scores:[]};seedIfEmpty();renderAll();toast("已清空并重置");}
+
+/* ---------- 协作链接（URL hash 编码，零服务器） ---------- */
+function b64encode(obj){return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));}
+function b64decode(str){return JSON.parse(decodeURIComponent(escape(atob(str))));}
+function copyText(t){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>{},()=>fallbackCopy(t));}else fallbackCopy(t);}
+function fallbackCopy(t){const ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");}catch(e){}document.body.removeChild(ta);}
+function linkWith(hash){return location.href.split("#")[0]+hash;}
+/* 预置岗位双方本地都有全量SEED，链接里只带 id+name（轻量）即可用名称匹配；
+   自定义岗位对方没有，必须带全量（含维度/STAR）。这样既压缩体积又保留候选人岗位关联。 */
+function exportPositions(){return S.positions.map(p=>p.is_preset
+  ?{id:p.id,name:p.name,is_preset:true}
+  :{id:p.id,name:p.name,tag:p.tag,summary:p.summary,dimensions:p.dimensions,is_preset:false});}
+function copyConfigLink(){const slice={positions:exportPositions(),interviewers:S.interviewers,candidates:S.candidates};
+  const h="#cfg="+b64encode(slice);if(h.length>30000){toast("配置较大，请用『导入并合并』发JSON文件");return;}
+  copyText(linkWith(h));toast("协作链接已复制，发给面试官即可");}
+function copyScoresLink(){const slice={positions:exportPositions(),interviewers:S.interviewers,candidates:S.candidates,scores:S.scores};
+  const h="#sc="+b64encode(slice);if(h.length>30000){toast("评分较多，请用『导出评分』JSON发HR");return;}
+  copyText(linkWith(h));toast("评分链接已复制，发回HR即可");}
+function tryHash(){const h=location.hash;
+  if(h.indexOf("#cfg=")===0){try{mergeState(b64decode(h.slice(5)));save();cleanHash();toast("已载入协作配置 ✔");}catch(e){toast("链接解析失败");}}
+  else if(h.indexOf("#sc=")===0){try{mergeState(b64decode(h.slice(4)));save();cleanHash();toast("已合并评分 ✔");}catch(e){toast("链接解析失败");}}}
+function cleanHash(){history.replaceState(null,"",location.pathname+location.search);}
+
+/* ---------- 渲染调度 ---------- */
+function renderAll(){renderConfig();renderResult();}
+document.querySelectorAll("nav button").forEach(b=>{b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));$("#v-"+b.dataset.v).classList.add("on");};});
+$("#sel-iv").onchange=renderScoreForm;$("#sel-ca").onchange=renderScoreForm;
+(function init(){S=load()||S;seedIfEmpty();renderAll();tryHash();})();
+</script>
+</body>
+</html>
