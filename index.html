@@ -545,16 +545,23 @@ function ghRead(){return ghReq(ghUrl()).then(r=>{
   if(r.status===404)return {sha:null,state:blankState()};
   if(!r.ok)return r.text().then(t=>{throw new Error("读取失败("+r.status+"): "+t.slice(0,120));});
   return r.json().then(j=>({sha:j.sha,state:JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}));});}
-function ghWrite(state,sha){const body={message:"hr-interview update",content:btoa(unescape(encodeURIComponent(JSON.stringify(state))))};if(sha)body.sha=sha;
-  return ghReq(ghUrl(),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error("写入失败("+r.status+"): "+t.slice(0,120));});return r.json();});}
-/* 面试官提交：读回云端 → 合并该评分(并按id补齐候选人/岗位/面试官) → 写回 */
+/* 上传前剥离 Token 等敏感信息，避免 GitHub Secret Scanning 409 拦截 */
+function stripForUpload(state){
+  const s={...state};
+  if(s.cloud)s.cloud={repo:s.cloud.repo||'',file:s.cloud.file||'',token:''};
+  return s;
+}
+function ghWrite(state,sha){const safe=stripForUpload(state);const body={message:"hr-interview update",content:btoa(unescape(encodeURIComponent(JSON.stringify(safe))))};if(sha)body.sha=sha;
+  return ghReq(ghUrl(),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error("写入失败("+r.status+"): "+t.slice(0,200));});return r.json();});}
+/* 面试官提交：读回云端 → 合并该评分(并按id补齐候选人/岗位/面试官) → 写回（不含Token） */
 function cloudPushScore(rec){return ghRead().then(({sha,state})=>{
   const st=(state&&state.scores)?state:blankState();
   const c=S.candidates.find(x=>x.id==rec.candidate_id); if(c&&!st.candidates.some(x=>x.id==c.id))st.candidates.push(c);
   const cp=c?posById(c.position_id):null; if(cp&&!st.positions.some(p=>p.id==cp.id))st.positions.push(cp);
   const iv=S.interviewers.find(i=>i.id==rec.interviewer_id); if(iv&&!st.interviewers.some(i=>i.id==iv.id))st.interviewers.push(iv);
   st.scores=st.scores||[];
-  if(!st.cloud&&S.cloud)st.cloud=S.cloud;
+  /* 云端只记 repo/file（不含token），避免 Secret Scanning 409 */
+  if(S.cloud.repo)st.cloud={repo:S.cloud.repo,file:S.cloud.file||'',token:''};
   const ex=st.scores.find(s=>s.interviewer_id==rec.interviewer_id&&s.candidate_id==rec.candidate_id);
   if(ex)Object.assign(ex,rec);else st.scores.push(rec);
   return ghWrite(st,sha);});}
@@ -589,7 +596,7 @@ function pushCloud(){
   const base=location.href.split("#")[0].split("?")[0];
   history.replaceState(null,"",base+"?gh="+encodeURIComponent(S.cloud.repo)+"&ghf="+encodeURIComponent(S.cloud.file)+"&ghk="+encodeURIComponent(S.cloud.token));
   toast("上传中…");
-  ghRead().then(({sha})=>ghWrite({positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores,cloud:S.cloud},sha))
+  ghRead().then(({sha})=>ghWrite({positions:S.positions,interviewers:S.interviewers,candidates:S.candidates,archived:S.archived,scores:S.scores,cloud:{repo:S.cloud.repo,file:S.cloud.file,token:''}},sha))
     .then(()=>toast("配置已上传GitHub云端 ✔（地址栏已含云端配置，可直接分享）")).catch(e=>toast("上传失败:"+e.message));}
 function fetchCloud(){if(!GH_REPO||!GH_FILE){toast("未设置GitHub云端");return;}toast("从云端刷新…");
   ghRead().then(({state})=>{mergeState(state);if(state.cloud){S.cloud=state.cloud;GH_REPO=S.cloud.repo;GH_FILE=S.cloud.file;GH_TOKEN=S.cloud.token;}save();toast("已从GitHub云端合并 ✔");renderAll();}).catch(e=>toast("云端拉取失败:"+e.message));}
