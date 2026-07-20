@@ -529,13 +529,24 @@ function cleanHash(){history.replaceState(null,"",location.pathname+location.sea
 /* ---------- GitHub 当云端（零部署） ---------- */
 function blankState(){return {positions:[],interviewers:[],candidates:[],archived:[],scores:[]};}
 function ghApi(path,opts){const h={"Authorization":"Bearer "+(GH_TOKEN||S.cloud.token),"Accept":"application/vnd.github+json"};if(opts&&opts.body)h["Content-Type"]="application/json";return fetch("https://api.github.com/"+path,Object.assign({},opts,{headers:h}));}
+/* 带重试的请求：GitHub 偶发 5xx/429 会退避重试，吸收瞬时故障，避免“上传失败”误报 */
+function ghReq(path,opts,attempt){attempt=attempt||1;
+  return ghApi(path,opts).then(r=>{
+    if(r.ok)return r;
+    /* 服务端瞬时错误 → 重试；认证/未找到等不重试 */
+    if((r.status>=500&&r.status<600)||r.status===429){
+      if(attempt>=3)return r.text().then(t=>{throw new Error("GitHub 服务端暂时不可用("+r.status+")，请稍后点按钮重试");});
+      return new Promise(res=>setTimeout(res,800*attempt)).then(()=>ghReq(path,opts,attempt+1));
+    }
+    return r;});
+}
 function ghUrl(){return "repos/"+GH_REPO+"/contents/"+encodeURIComponent(GH_FILE);}
-function ghRead(){return ghApi(ghUrl()).then(r=>{
+function ghRead(){return ghReq(ghUrl()).then(r=>{
   if(r.status===404)return {sha:null,state:blankState()};
   if(!r.ok)return r.text().then(t=>{throw new Error("读取失败("+r.status+"): "+t.slice(0,120));});
   return r.json().then(j=>({sha:j.sha,state:JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))))}));});}
 function ghWrite(state,sha){const body={message:"hr-interview update",content:btoa(unescape(encodeURIComponent(JSON.stringify(state))))};if(sha)body.sha=sha;
-  return ghApi(ghUrl(),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error("写入失败("+r.status+"): "+t.slice(0,120));});return r.json();});}
+  return ghReq(ghUrl(),{method:"PUT",body:JSON.stringify(body)}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error("写入失败("+r.status+"): "+t.slice(0,120));});return r.json();});}
 /* 面试官提交：读回云端 → 合并该评分(并按id补齐候选人/岗位/面试官) → 写回 */
 function cloudPushScore(rec){return ghRead().then(({sha,state})=>{
   const st=(state&&state.scores)?state:blankState();
